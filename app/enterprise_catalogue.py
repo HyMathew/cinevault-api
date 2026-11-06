@@ -171,8 +171,8 @@ def delete_movie(movie_id):
         conflict = precondition(movie)
         if conflict:
             return conflict
-        if any(c['movie_id'] == movie_id for c in document['copies']):
-            return error(409,'referenced','Traitez les exemplaires avant de supprimer le film.')
+        if any(c['movie_id'] == movie_id for c in document['copies']) or any(e['movie_id'] == movie_id for e in document['collections']):
+            return error(409,'referenced','Des exemplaires ou collections référencent ce film.')
         document['movies'].remove(movie)
         return '',204
     return management(delete)
@@ -196,6 +196,8 @@ def get_copy(copy_id):
 def create_copy():
     def create(document,user):
         data = payload(('movie_id',*COPY_FIELDS))
+        if not isinstance(data['movie_id'],str):
+            raise ValidationError({'movie_id':'Identifiant de film invalide.'})
         attributes = copy_data({k:data[k] for k in COPY_FIELDS})
         if lookup(document,'movies',data['movie_id']) is None:
             return missing()

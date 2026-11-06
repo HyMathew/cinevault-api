@@ -12,6 +12,7 @@ import portalocker
 from .repository import unique_pairs
 from .validation import ValidationError, is_unicode, validate
 from .auth_storage import validate_auth
+from .business_storage import validate_business
 
 COLLECTIONS = ('users', 'sessions', 'auth_attempts', 'idempotency_records', 'movies',
                'copies', 'collections', 'loans', 'reservations', 'audit_events')
@@ -37,7 +38,7 @@ def validate_document(data):
     for name in COLLECTIONS:
         if not isinstance(data[name], list):
             raise ValueError('Invalid collection')
-        if name not in ('movies', 'copies', 'users', 'sessions', 'auth_attempts') and data[name]:
+        if name not in ('movies', 'copies', 'users', 'sessions', 'auth_attempts', 'collections', 'audit_events') and data[name]:
             raise ValueError('Entity not yet supported')
     ids = set()
     movie_ids = set()
@@ -68,6 +69,7 @@ def validate_document(data):
         if not isinstance(copy['location'], str) or not is_unicode(copy['location']) or len(copy['location']) > 200:
             raise ValueError('Invalid location')
     validate_auth(data, ids, _valid_uuid)
+    validate_business(data, ids, _valid_uuid)
     return data
 
 

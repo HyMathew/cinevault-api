@@ -926,6 +926,385 @@
           }
         ]
       }
+    },
+    "/api/v1/collections": {
+      "get": {
+        "operationId": "listCollections",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionList"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "owned",
+                "favorite",
+                "watched",
+                "watchlist",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "list_name",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 24
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createCollectionEntry",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionEntry"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/collections/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCollectionEntry",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionEntry"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "replaceCollectionEntry",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionEntry"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionUpdate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteCollectionEntry",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "204": {
+            "description": "Succès"
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "operationId": "listAuditEvents",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditList"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ]
+      }
     }
   },
   "security": [
@@ -1466,6 +1845,448 @@
             "items": {
               "$ref": "#/components/schemas/Copy"
             }
+          }
+        }
+      },
+      "Stored_timestamp": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "Stored_collection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner_id",
+          "movie_id",
+          "kind",
+          "list_name",
+          "supports",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "owner_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "kind": {
+            "enum": [
+              "owned",
+              "favorite",
+              "watched",
+              "watchlist",
+              "custom"
+            ]
+          },
+          "list_name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "supports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 5,
+            "items": {
+              "enum": [
+                "numerique",
+                "dvd",
+                "blu-ray",
+                "vhs",
+                "autre"
+              ]
+            }
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "custom"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "list_name": {
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "list_name": {
+                  "const": ""
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "favorite",
+                    "watched",
+                    "watchlist",
+                    "custom"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "supports": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Stored_audit_event": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "actor_id",
+          "action",
+          "entity_type",
+          "entity_id",
+          "timestamp"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "actor_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "entity_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "action": {
+            "enum": [
+              "movie.created",
+              "movie.updated",
+              "movie.deleted",
+              "copy.created",
+              "copy.updated",
+              "copy.deleted",
+              "collection.created",
+              "collection.updated",
+              "collection.deleted"
+            ]
+          },
+          "entity_type": {
+            "enum": [
+              "movie",
+              "copy",
+              "collection"
+            ]
+          },
+          "timestamp": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          }
+        }
+      },
+      "CollectionEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner_id",
+          "movie_id",
+          "kind",
+          "list_name",
+          "supports",
+          "created_at",
+          "_etag"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "owner_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "kind": {
+            "enum": [
+              "owned",
+              "favorite",
+              "watched",
+              "watchlist",
+              "custom"
+            ]
+          },
+          "list_name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "supports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 5,
+            "items": {
+              "enum": [
+                "numerique",
+                "dvd",
+                "blu-ray",
+                "vhs",
+                "autre"
+              ]
+            }
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "_etag": {
+            "type": "string",
+            "pattern": "^\"[0-9a-f]{64}\"$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "custom"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "list_name": {
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "list_name": {
+                  "const": ""
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "favorite",
+                    "watched",
+                    "watchlist",
+                    "custom"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "supports": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CollectionCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "movie_id",
+          "kind"
+        ],
+        "properties": {
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "kind": {
+            "enum": [
+              "owned",
+              "favorite",
+              "watched",
+              "watchlist",
+              "custom"
+            ]
+          },
+          "list_name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "supports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 5,
+            "items": {
+              "enum": [
+                "numerique",
+                "dvd",
+                "blu-ray",
+                "vhs",
+                "autre"
+              ]
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "custom"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "list_name": {
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                }
+              },
+              "required": [
+                "list_name"
+              ]
+            },
+            "else": {
+              "properties": {
+                "list_name": {
+                  "const": ""
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "favorite",
+                    "watched",
+                    "watchlist",
+                    "custom"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "supports": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CollectionUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "list_name",
+          "supports"
+        ],
+        "properties": {
+          "list_name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "supports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 5,
+            "items": {
+              "enum": [
+                "numerique",
+                "dvd",
+                "blu-ray",
+                "vhs",
+                "autre"
+              ]
+            }
+          }
+        }
+      },
+      "CollectionList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entries",
+          "total",
+          "limit",
+          "offset",
+          "movies"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "movies": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          }
+        }
+      },
+      "AuditList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "events",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stored_audit_event"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }

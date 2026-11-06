@@ -5,81 +5,443 @@
   "description": "Les tableaux réservés aux fonctions futures doivent être vides ; les règles transversales sont contrôlées par validate_document.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "revision", "users", "sessions", "auth_attempts", "idempotency_records", "movies", "copies", "collections", "loans", "reservations", "audit_events"],
+  "required": [
+    "schema_version",
+    "revision",
+    "users",
+    "sessions",
+    "auth_attempts",
+    "idempotency_records",
+    "movies",
+    "copies",
+    "collections",
+    "loans",
+    "reservations",
+    "audit_events"
+  ],
   "properties": {
-    "schema_version": {"const": 2},
-    "revision": {"type": "integer", "minimum": 0},
-    "users": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/user"}},
-    "sessions": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/session"}},
-    "auth_attempts": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/attempt"}},
-    "idempotency_records": {"$ref": "#/$defs/reserved"},
-    "collections": {"$ref": "#/$defs/reserved"},
-    "loans": {"$ref": "#/$defs/reserved"},
-    "reservations": {"$ref": "#/$defs/reserved"},
-    "audit_events": {"$ref": "#/$defs/reserved"},
-    "movies": {"type": "array", "items": {"$ref": "#/$defs/movie"}},
-    "copies": {"type": "array", "items": {"$ref": "#/$defs/copy"}}
+    "schema_version": {
+      "const": 2
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "users": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/user"
+      }
+    },
+    "sessions": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/session"
+      }
+    },
+    "auth_attempts": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/attempt"
+      }
+    },
+    "idempotency_records": {
+      "$ref": "#/$defs/reserved"
+    },
+    "collections": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/collection"
+      }
+    },
+    "loans": {
+      "$ref": "#/$defs/reserved"
+    },
+    "reservations": {
+      "$ref": "#/$defs/reserved"
+    },
+    "audit_events": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/audit_event"
+      }
+    },
+    "movies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/movie"
+      }
+    },
+    "copies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/copy"
+      }
+    }
   },
   "$defs": {
-    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "timestamp": {"type": "integer", "minimum": 0},
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "integer",
+      "minimum": 0
+    },
     "user": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "username", "display_name", "password_hash", "role", "enabled", "created_at"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "username",
+        "display_name",
+        "password_hash",
+        "role",
+        "enabled",
+        "created_at"
+      ],
       "properties": {
-        "id": {"$ref": "#/$defs/id"},
-        "username": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$"},
-        "display_name": {"$ref": "#/$defs/shortText"},
-        "password_hash": {"type": "string", "pattern": "^\\$argon2id\\$", "maxLength": 512},
-        "role": {"enum": ["member", "manager", "admin"]},
-        "enabled": {"type": "boolean"},
-        "created_at": {"$ref": "#/$defs/timestamp"}
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "username": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$"
+        },
+        "display_name": {
+          "$ref": "#/$defs/shortText"
+        },
+        "password_hash": {
+          "type": "string",
+          "pattern": "^\\$argon2id\\$",
+          "maxLength": 512
+        },
+        "role": {
+          "enum": [
+            "member",
+            "manager",
+            "admin"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        }
       }
     },
     "session": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "user_id", "token_hash", "created_at", "last_seen", "expires_at"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "user_id",
+        "token_hash",
+        "created_at",
+        "last_seen",
+        "expires_at"
+      ],
       "properties": {
-        "id": {"$ref": "#/$defs/id"}, "user_id": {"$ref": "#/$defs/id"},
-        "token_hash": {"$ref": "#/$defs/digest"},
-        "created_at": {"$ref": "#/$defs/timestamp"},
-        "last_seen": {"$ref": "#/$defs/timestamp"},
-        "expires_at": {"$ref": "#/$defs/timestamp"}
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "user_id": {
+          "$ref": "#/$defs/id"
+        },
+        "token_hash": {
+          "$ref": "#/$defs/digest"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "last_seen": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        }
       }
     },
     "attempt": {
-      "type": "object", "additionalProperties": false,
-      "required": ["key", "window_start", "count"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "window_start",
+        "count"
+      ],
       "properties": {
-        "key": {"$ref": "#/$defs/digest"},
-        "window_start": {"$ref": "#/$defs/timestamp"},
-        "count": {"type": "integer", "minimum": 1, "maximum": 5}
+        "key": {
+          "$ref": "#/$defs/digest"
+        },
+        "window_start": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
       }
     },
-    "reserved": {"type": "array", "maxItems": 0},
-    "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
-    "shortText": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"},
+    "reserved": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
     "movie": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "title", "year", "director", "actors", "synopsis", "genres"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "year",
+        "director",
+        "actors",
+        "synopsis",
+        "genres"
+      ],
       "properties": {
-        "id": {"$ref": "#/$defs/id"},
-        "title": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"},
-        "year": {"type": "integer", "minimum": 1888, "maximum": 2100},
-        "director": {"$ref": "#/$defs/shortText"},
-        "actors": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/shortText"}},
-        "synopsis": {"type": "string", "maxLength": 4000},
-        "genres": {"type": "array", "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"}}
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1888,
+          "maximum": 2100
+        },
+        "director": {
+          "$ref": "#/$defs/shortText"
+        },
+        "actors": {
+          "type": "array",
+          "maxItems": 30,
+          "items": {
+            "$ref": "#/$defs/shortText"
+          }
+        },
+        "synopsis": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "genres": {
+          "type": "array",
+          "maxItems": 30,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
       }
     },
     "copy": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "movie_id", "support", "location", "condition"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "support",
+        "location",
+        "condition"
+      ],
       "properties": {
-        "id": {"$ref": "#/$defs/id"}, "movie_id": {"$ref": "#/$defs/id"},
-        "support": {"enum": ["numerique", "dvd", "blu-ray", "vhs", "autre"]},
-        "location": {"type": "string", "maxLength": 200},
-        "condition": {"enum": ["unknown", "good", "damaged"]}
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "support": {
+          "enum": [
+            "numerique",
+            "dvd",
+            "blu-ray",
+            "vhs",
+            "autre"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "condition": {
+          "enum": [
+            "unknown",
+            "good",
+            "damaged"
+          ]
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "owner_id",
+        "movie_id",
+        "kind",
+        "list_name",
+        "supports",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "owned",
+            "favorite",
+            "watched",
+            "watchlist",
+            "custom"
+          ]
+        },
+        "list_name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "supports": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 5,
+          "items": {
+            "enum": [
+              "numerique",
+              "dvd",
+              "blu-ray",
+              "vhs",
+              "autre"
+            ]
+          }
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "custom"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "list_name": {
+                "minLength": 1,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "list_name": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "favorite",
+                  "watched",
+                  "watchlist",
+                  "custom"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "supports": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "audit_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "actor_id",
+        "action",
+        "entity_type",
+        "entity_id",
+        "timestamp"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "actor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/id"
+        },
+        "action": {
+          "enum": [
+            "movie.created",
+            "movie.updated",
+            "movie.deleted",
+            "copy.created",
+            "copy.updated",
+            "copy.deleted",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted"
+          ]
+        },
+        "entity_type": {
+          "enum": [
+            "movie",
+            "copy",
+            "collection"
+          ]
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        }
       }
     }
   }

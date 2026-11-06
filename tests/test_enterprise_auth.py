@@ -220,3 +220,16 @@ def test_invalid_sessions_never_rewrite_the_document(enterprise):
     for headers in ({},auth,{'Authorization':'Bearer '+'f' * 43}):
         assert client.get('/api/v1/me',headers=headers).status_code == 401
         assert path.read_bytes() == before
+
+
+def test_bootstrap_cli_rejects_noninteractive_input_without_modifying_store(tmp_path):
+    import subprocess
+    import sys
+    path = tmp_path/'bootstrap-cli.json'
+    V2Store(path).initialize()
+    before = path.read_bytes()
+    result = subprocess.run([sys.executable,'-m','app.bootstrap','--store',str(path)],
+                            input='ignored synthetic input\n',capture_output=True,text=True)
+    assert result.returncode == 2
+    assert 'interactive terminal' in result.stderr
+    assert path.read_bytes() == before
