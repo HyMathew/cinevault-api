@@ -13,4 +13,4 @@ Extension du jalon comptes. Lecture publique ; mutations réservées aux rôles 
 
 La version `_etag` est calculée sur les attributs persistés de l'entité, et non sur la révision globale qui varie avec les sessions. If-Match absent : 428 ; version périmée : 412. Aucun changement métier n'est appliqué dans ces cas. Les listes ne modifient pas le fichier. Les attributs inconnus sont refusés ; les règles du schéma v2 restent applicables. Le catalogue legacy reste réservé à la pédagogie et ses mutations demeurent refusées en mode Enterprise.
 
-À ce jalon, prêts, réservations et collections ne sont pas encore activés ; leurs intégrités devront être ajoutées avant de permettre leurs données non vides dans le validateur. Les nouveaux contrats devront conserver les protections de suppression et de concurrence.
+Les collections, prêts et réservations sont désormais raccordés à ce catalogue. Leurs références historiques empêchent la suppression du film concerné ; les références de prêt empêchent aussi celle d'un exemplaire. Voir les contrats dédiés et les preuves des jalons correspondants. Les versions et la transaction unique restent obligatoires.

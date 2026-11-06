@@ -7,6 +7,7 @@ from .audit import record_event
 from .enterprise_auth import check_store,error,forbidden,no_cache,now,payload,protected,public_profile
 from .enterprise_catalogue import bounded_integer,lookup,missing,precondition,resource,respond
 from .validation import ValidationError
+from .reservation_service import availability as inventory_availability,expire_waiting,free_copies,fulfill,priority_allows
 
 bp = Blueprint('enterprise_lending',__name__,url_prefix='/api/v1')
 bp.after_request(no_cache)
@@ -84,6 +85,7 @@ def approve_loan(loan_id):
     def approve(document,user,session):
         if user['role'] not in MANAGERS:
             return forbidden()
+        expire_waiting(document,now())
         loan = lookup(document,'loans',loan_id)
         if loan is None:
             return missing()
@@ -104,8 +106,10 @@ def approve_loan(loan_id):
             return missing()
         if copy['movie_id'] != loan['movie_id'] or copy['condition'] == 'damaged' or any(l['copy_id'] == copy['id'] and l['status'] == 'active' for l in document['loans']):
             return error(409,'copy_unavailable','Cet exemplaire ne peut pas être attribué.')
-        # Reservations remain rejected by the store until their own state machine is implemented.
+        if not priority_allows(document,loan,timestamp):
+            return error(409,'reservation_priority','Une réservation prioritaire doit être traitée avant cette demande.')
         loan.update(copy_id=copy['id'],status='active',approved_at=timestamp,due_at=data['due_at'])
+        fulfill(document,loan,user['id'],timestamp)
         record_event(document,user['id'],'loan',loan_id,'approved')
         return respond(loan)
     return protected(approve)
@@ -116,6 +120,7 @@ def loan_options(loan_id):
     def options(document,user,session):
         if user['role'] not in MANAGERS:
             return forbidden()
+        expire_waiting(document,now())
         loan=lookup(document,'loans',loan_id)
         if loan is None:
             return missing()
@@ -124,9 +129,8 @@ def loan_options(loan_id):
         problem=borrower_problem(document,loan)
         if problem:
             return problem
-        occupied={l['copy_id'] for l in document['loans'] if l['status']=='active'}
-        return {'loan_id':loan_id,'copies':[resource(c) for c in document['copies']
-            if c['movie_id']==loan['movie_id'] and c['condition']!='damaged' and c['id'] not in occupied]}
+        copies=free_copies(document,loan['movie_id']) if priority_allows(document,loan,now()) else []
+        return {'loan_id':loan_id,'copies':[resource(c) for c in copies]}
     return protected(options)
 
 
@@ -178,7 +182,4 @@ def availability():
     document = check_store()
     if lookup(document,'movies',identity) is None:
         return missing()
-    copies = [c for c in document['copies'] if c['movie_id'] == identity]
-    active = {l['copy_id'] for l in document['loans'] if l['status'] == 'active' and l['movie_id'] == identity}
-    free = [c for c in copies if c['condition'] != 'damaged' and c['id'] not in active]
-    return {'movie_id':identity,'total':len(copies),'loaned':len(active),'free':len(free),'reserved':0,'available':len(free)}
+    return inventory_availability(document,identity,now())

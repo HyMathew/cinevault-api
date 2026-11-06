@@ -1,6 +1,6 @@
 # Contrat du jalon prêts et réservations
 
-**État au 6 novembre 2026 : prêts implémentés, réservations encore à réaliser.** Les prêts possèdent désormais validateurs, routes, écrans et tests ; les réservations non vides restent refusées par le stockage. La spécification de réservation ci-dessous décrit donc une cible, pas une fonction disponible. L'intégration réelle prêts/comptes/catalogue/collections a réussi 82 contrôles HTTP locaux. Les cinq tests dédiés API incluent deux processus d'approbation concurrents et le refus d'attribuer à un compte désactivé. Ces preuves ne valent ni audit final ni déploiement Swarm.
+**État du jalon : prêts et réservations réalisés en local.** Les deux fonctions possèdent validateurs, routes et écrans. L'intégration réelle comptes/catalogue/collections/prêts/réservations a réussi 112 contrôles HTTP locaux. Les tests dédiés comprennent deux processus d'approbation du même exemplaire et deux processus de création d'une même attente, ainsi que l'expiration avec horloge contrôlée. Voir [les règles réalisées](reservations.md). Ces preuves ne valent ni contrôle navigateur complet, ni audit final, ni déploiement Swarm.
 
 ## Prêts
 

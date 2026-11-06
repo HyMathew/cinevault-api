@@ -66,7 +66,11 @@
       }
     },
     "reservations": {
-      "$ref": "#/$defs/reserved"
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/reservation"
+      }
     },
     "audit_events": {
       "type": "array",
@@ -418,7 +422,14 @@
           "$ref": "#/$defs/id"
         },
         "actor_id": {
-          "$ref": "#/$defs/id"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "entity_id": {
           "$ref": "#/$defs/id"
@@ -437,7 +448,11 @@
             "loan.requested",
             "loan.approved",
             "loan.returned",
-            "loan.cancelled"
+            "loan.cancelled",
+            "reservation.created",
+            "reservation.fulfilled",
+            "reservation.cancelled",
+            "reservation.expired"
           ]
         },
         "entity_type": {
@@ -445,13 +460,39 @@
             "movie",
             "copy",
             "collection",
-            "loan"
+            "loan",
+            "reservation"
           ]
         },
         "timestamp": {
           "$ref": "#/$defs/timestamp"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "reservation.expired"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "actor_id": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "actor_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        }
+      ]
     },
     "loan": {
       "type": "object",
@@ -626,6 +667,124 @@
             },
             "cancelled_at": {
               "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      ]
+    },
+    "reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "user_id",
+        "status",
+        "sequence",
+        "created_at",
+        "expires_at",
+        "closed_at",
+        "loan_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "user_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": [
+            "waiting",
+            "fulfilled",
+            "cancelled",
+            "expired"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "closed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loan_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "waiting"
+            },
+            "closed_at": {
+              "type": "null"
+            },
+            "loan_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "fulfilled"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "expired"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "type": "null"
             }
           }
         }

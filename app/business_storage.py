@@ -2,8 +2,8 @@
 from .validation import SUPPORTS, is_unicode
 
 KINDS = ('owned','favorite','watched','watchlist','custom')
-AUDIT_TYPES = ('movie','copy','collection','loan')
-AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in ('movie','copy','collection') for action in ('created','updated','deleted')) + tuple('loan.'+action for action in ('requested','approved','returned','cancelled'))
+AUDIT_TYPES = ('movie','copy','collection','loan','reservation')
+AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in ('movie','copy','collection') for action in ('created','updated','deleted')) + tuple('loan.'+action for action in ('requested','approved','returned','cancelled')) + tuple('reservation.'+action for action in ('created','fulfilled','cancelled','expired'))
 
 
 def valid_collection_attributes(kind, name, supports):
@@ -17,7 +17,7 @@ def valid_collection_attributes(kind, name, supports):
 
 
 def validate_business(document, ids, valid_uuid):
-    if len(document['collections']) > 10000 or len(document['loans']) > 10000 or len(document['audit_events']) > 2000:
+    if len(document['collections']) > 10000 or len(document['loans']) > 10000 or len(document['reservations']) > 10000 or len(document['audit_events']) > 2000:
         raise ValueError('Business collection limit exceeded')
     users = {u['id'] for u in document['users']}
     movies = {m['id'] for m in document['movies']}
@@ -75,11 +75,52 @@ def validate_business(document, ids, valid_uuid):
         ids.add(loan['id'])
     if any(count > 5 for count in active_counts.values()) or any(count > 10 for count in pending_counts.values()):
         raise ValueError('Borrower loan limit exceeded')
+    validate_reservations(document,ids,valid_uuid,users,movies)
     for event in document['audit_events']:
         if not isinstance(event,dict) or set(event) != {'id','actor_id','action','entity_type','entity_id','timestamp'}:
             raise ValueError('Invalid audit event fields')
-        if not valid_uuid(event['id']) or event['id'] in ids or event['actor_id'] not in users or not valid_uuid(event['entity_id']):
+        system_event=event['actor_id'] is None and event['action']=='reservation.expired'
+        if not valid_uuid(event['id']) or event['id'] in ids or (not system_event and event['actor_id'] not in users) or not valid_uuid(event['entity_id']):
             raise ValueError('Invalid audit reference')
         if event['entity_type'] not in AUDIT_TYPES or event['action'] not in AUDIT_ACTIONS or not event['action'].startswith(event['entity_type']+'.') or type(event['timestamp']) is not int or event['timestamp'] < 0:
             raise ValueError('Invalid audit event')
         ids.add(event['id'])
+
+
+def validate_reservations(document,ids,valid_uuid,users,movies):
+    loans={l['id']:l for l in document['loans']}
+    enabled={u['id'] for u in document['users'] if u['enabled']}
+    sequences,open_pairs,fulfilled_loans=set(),set(),set()
+    counts={}
+    for reservation in document['reservations']:
+        if not isinstance(reservation,dict) or set(reservation)!={'id','movie_id','user_id','status','sequence','created_at','expires_at','closed_at','loan_id'}:
+            raise ValueError('Invalid reservation fields')
+        if not valid_uuid(reservation['id']) or reservation['id'] in ids or reservation['movie_id'] not in movies or reservation['user_id'] not in users:
+            raise ValueError('Invalid reservation reference')
+        if reservation['status'] not in ('waiting','fulfilled','cancelled','expired') or type(reservation['sequence']) is not int or not 1<=reservation['sequence']<=document['revision'] or reservation['sequence'] in sequences:
+            raise ValueError('Invalid reservation sequence or status')
+        if any(type(reservation[k]) is not int for k in ('created_at','expires_at')) or not 0<=reservation['created_at']<reservation['expires_at']<=reservation['created_at']+14*86400:
+            raise ValueError('Invalid reservation timestamps')
+        status=reservation['status']
+        if status=='waiting':
+            pair=(reservation['user_id'],reservation['movie_id'])
+            if reservation['closed_at'] is not None or reservation['loan_id'] is not None or pair in open_pairs or reservation['user_id'] not in enabled:
+                raise ValueError('Invalid waiting reservation')
+            open_pairs.add(pair)
+            counts[reservation['user_id']]=counts.get(reservation['user_id'],0)+1
+        else:
+            if type(reservation['closed_at']) is not int or reservation['closed_at']<reservation['created_at']:
+                raise ValueError('Invalid closed reservation')
+            if status=='expired' and reservation['closed_at']<reservation['expires_at']:
+                raise ValueError('Reservation expired too early')
+            if status=='fulfilled':
+                loan=loans.get(reservation['loan_id'])
+                if not loan or loan['status'] not in ('active','returned') or loan['movie_id']!=reservation['movie_id'] or loan['borrower_id']!=reservation['user_id'] or loan['approved_at']!=reservation['closed_at'] or reservation['closed_at']>=reservation['expires_at'] or loan['id'] in fulfilled_loans:
+                    raise ValueError('Invalid fulfilled reservation')
+                fulfilled_loans.add(loan['id'])
+            elif reservation['loan_id'] is not None:
+                raise ValueError('Unexpected reservation loan reference')
+        sequences.add(reservation['sequence'])
+        ids.add(reservation['id'])
+    if any(count>10 for count in counts.values()):
+        raise ValueError('Reservation limit exceeded')

@@ -171,7 +171,7 @@ def delete_movie(movie_id):
         conflict = precondition(movie)
         if conflict:
             return conflict
-        if any(c['movie_id'] == movie_id for c in document['copies']) or any(e['movie_id'] == movie_id for e in document['collections']) or any(l['movie_id'] == movie_id for l in document['loans']):
+        if any(c['movie_id'] == movie_id for c in document['copies']) or any(e['movie_id'] == movie_id for e in document['collections']) or any(l['movie_id'] == movie_id for l in document['loans']) or any(r['movie_id']==movie_id for r in document['reservations']):
             return error(409,'referenced','Des exemplaires ou collections référencent ce film.')
         document['movies'].remove(movie)
         return '',204

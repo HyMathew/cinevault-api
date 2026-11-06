@@ -296,6 +296,9 @@ def update_user(user_id):
                 return error(409, 'last_admin', 'Le dernier administrateur actif doit être conservé.')
         changed = any(target[k] != v for k, v in data.items())
         target.update(data)
+        if not target['enabled']:
+            from .reservation_service import cancel_disabled
+            cancel_disabled(doc,target['id'],user['id'],now())
         if changed:
             doc['sessions'][:] = [s for s in doc['sessions'] if s['user_id'] != target['id']]
         return jsonify(public_profile(target)), 200
@@ -330,3 +333,5 @@ def install_enterprise(app):
     app.register_blueprint(collections_bp)
     from .enterprise_lending import bp as lending_bp
     app.register_blueprint(lending_bp)
+    from .enterprise_reservations import bp as reservations_bp
+    app.register_blueprint(reservations_bp)

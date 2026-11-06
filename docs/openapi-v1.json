@@ -1848,6 +1848,290 @@
           }
         }
       }
+    },
+    "/api/v1/reservations": {
+      "post": {
+        "operationId": "createReservation",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "movie_id"
+                ],
+                "properties": {
+                  "movie_id": {
+                    "$ref": "#/components/schemas/Stored_id"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listReservations",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationList"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "waiting",
+                "fulfilled",
+                "cancelled",
+                "expired"
+              ]
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "mine",
+                "all"
+              ],
+              "description": "all est réservé aux gestionnaires et administrateurs."
+            }
+          },
+          {
+            "name": "movie_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 24
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/reservations/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getReservation",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reservations/{id}/cancel": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "cancelReservation",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "security": [
@@ -2512,7 +2796,14 @@
             "$ref": "#/components/schemas/Stored_id"
           },
           "actor_id": {
-            "$ref": "#/components/schemas/Stored_id"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "entity_id": {
             "$ref": "#/components/schemas/Stored_id"
@@ -2531,7 +2822,11 @@
               "loan.requested",
               "loan.approved",
               "loan.returned",
-              "loan.cancelled"
+              "loan.cancelled",
+              "reservation.created",
+              "reservation.fulfilled",
+              "reservation.cancelled",
+              "reservation.expired"
             ]
           },
           "entity_type": {
@@ -2539,13 +2834,39 @@
               "movie",
               "copy",
               "collection",
-              "loan"
+              "loan",
+              "reservation"
             ]
           },
           "timestamp": {
             "$ref": "#/components/schemas/Stored_timestamp"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "reservation.expired"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "actor_id": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "actor_id": {
+                  "$ref": "#/components/schemas/Stored_id"
+                }
+              }
+            }
+          }
+        ]
       },
       "CollectionEntry": {
         "type": "object",
@@ -3280,7 +3601,8 @@
           },
           "reserved": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Nombre de réservations en attente non expirées, pouvant excéder le nombre d’exemplaires."
           },
           "available": {
             "type": "integer",
@@ -3303,6 +3625,314 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Copy"
+            }
+          }
+        }
+      },
+      "Stored_reservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "user_id",
+          "status",
+          "sequence",
+          "created_at",
+          "expires_at",
+          "closed_at",
+          "loan_id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "status": {
+            "enum": [
+              "waiting",
+              "fulfilled",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "loan_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "const": "waiting"
+              },
+              "closed_at": {
+                "type": "null"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "fulfilled"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "expired"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      },
+      "Reservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "user_id",
+          "status",
+          "sequence",
+          "created_at",
+          "expires_at",
+          "closed_at",
+          "loan_id",
+          "_etag"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "status": {
+            "enum": [
+              "waiting",
+              "fulfilled",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "loan_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "_etag": {
+            "type": "string",
+            "pattern": "^\"[0-9a-f]{64}\"$"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "const": "waiting"
+              },
+              "closed_at": {
+                "type": "null"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "fulfilled"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "expired"
+              },
+              "closed_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "loan_id": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      },
+      "ReservationList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reservations",
+          "total",
+          "limit",
+          "offset",
+          "movies",
+          "users",
+          "positions",
+          "ready_ids",
+          "open_loan_ids"
+        ],
+        "properties": {
+          "reservations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reservation"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "movies": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          },
+          "users": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "positions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "ready_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/Stored_id"
+            }
+          },
+          "open_loan_ids": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Stored_id"
             }
           }
         }
