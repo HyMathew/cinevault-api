@@ -1,0 +1,19 @@
+# Contrat d'authentification Enterprise v1
+
+Contrat de coordination frontend/API, 6 novembre 2026. Son existence ne prouve pas son implémentation. Spécification associée : `openapi-v1.json`. Mode Enterprise **désactivé par défaut**, activé par configuration explicite ; fichier v2 existant et clé anti-abus fournis explicitement hors dépôt. Les routes v1 n'existent pas lorsque le mode est désactivé. Dès qu'il est activé, toute mutation anonyme des routes legacy est refusée ; leur lecture reste disponible pendant la transition pédagogique.
+
+L'API n'accepte comme identité qu'un `Authorization: Bearer <jeton opaque>` qu'elle a émis. Le jeton aléatoire est renvoyé une seule fois lors de la connexion ; seule son empreinte est conservée côté API. Le frontend l'utilise dans un cookie `HttpOnly`, `SameSite=Lax`, `Secure` sous HTTPS, puis relaie ce bearer vers l'API, sans le placer dans le HTML, les URL ou les logs. La protection CSRF est à la charge des routes web, pour chaque mutation, y compris login et logout. Un service web–API doit être confidentiel et authentifié ; HTTP sur un réseau non fiable n'est pas acceptable pour de vrais comptes.
+
+- `POST /api/v1/auth/register` : JSON `username`, `display_name`, `password`. Crée seulement un membre ; 201 et profil public, 409 identifiant déjà utilisé, 422 données incorrectes. Le rôle ne peut pas être fourni.
+- `POST /api/v1/auth/login` : JSON `username`, `password`. 200 `{ "token": "...", "token_type": "Bearer", "expires_in": 28800 }` ; erreurs d'authentification 401 uniformes et 429 avec `Retry-After`. Le jeton expire après huit heures maximum et après 30 minutes d'inactivité.
+- `POST /api/v1/auth/logout` : bearer requis, 204 et révocation. Un jeton révoqué reçoit ensuite 401.
+- `GET /api/v1/me` : bearer requis, 200 profil public `{id, username, display_name, role, enabled}` ; aucune empreinte ni aucun hachage.
+- `PATCH /api/v1/me` : bearer requis, JSON uniquement `display_name`, 200 profil ; ni rôle, ni statut modifiables par ce biais.
+- `PUT /api/v1/me/password` : bearer requis, JSON `current_password`, `new_password`. 204 si réussi et révocation de toutes les sessions du compte ; une nouvelle connexion est requise.
+- `GET /api/v1/users` : administrateur uniquement, liste de profils publics ; limite bornée.
+- `GET /api/v1/users/{id}` : propriétaire ou administrateur, 404 si absent ; les autres reçoivent 403.
+- `PATCH /api/v1/users/{id}` : administrateur uniquement, JSON `role` et/ou `enabled`, 200 profil ; protège le dernier administrateur actif, révoque les sessions du compte après changement de rôle/statut et refuse toute propriété supplémentaire.
+
+Rôles applicatifs : `member`, `manager`, `admin`. L'inscription ne crée que `member`. Le contrôle du rôle et de l'état est systématiquement effectué côté API sur l'état courant sous verrou. L'administrateur d'infrastructure n'est pas un rôle de l'application. 401 : session absente ou invalide ; 403 : rôle/propriété insuffisant ; 409 : conflit d'état ; 422 : validation ; 429 : limite ; 503 : stockage indisponible. Les erreurs JSON sont `{ "error": { "code": "...", "message": "...", "fields": {} } }`, `fields` facultatif. Réponses sensibles avec `Cache-Control: no-store`.
+
+Bootstrap initial : outil administratif local explicite sur un document v2 déjà initialisé ; saisie masquée interactive par l'opérateur, refus des pipes/arguments contenant un mot de passe. Il ne crée un administrateur que s'il n'y en a aucun, sous verrou ; pas de compte ou mot de passe prédéfini. La récupération administrative est distincte et non incluse dans ce jalon.

@@ -8,7 +8,10 @@ from .validation import ValidationError, validate
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.config.update(DATA_FILE=os.environ.get('DATA_FILE', '/data/films.json'), MAX_CONTENT_LENGTH=65536)
+    app.config.update(DATA_FILE=os.environ.get('DATA_FILE', '/data/films.json'), MAX_CONTENT_LENGTH=65536,
+                      ENTERPRISE_ENABLED=os.environ.get('ENTERPRISE_ENABLED', '').lower() == 'true',
+                      ENTERPRISE_DATA_FILE=os.environ.get('ENTERPRISE_DATA_FILE'),
+                      AUTH_THROTTLE_KEY_FILE=os.environ.get('AUTH_THROTTLE_KEY_FILE'))
     if config:
         app.config.update(config)
     repo = Repository(app.config['DATA_FILE'])
@@ -18,6 +21,15 @@ def create_app(config=None):
         if fields is not None:
             body['fields'] = fields
         return jsonify(error=body), status
+
+    if app.config['ENTERPRISE_ENABLED'] is True:
+        from .enterprise_auth import install_enterprise
+        install_enterprise(app)
+
+        @app.before_request
+        def block_legacy_mutation():
+            if (request.path == '/api/films' or request.path.startswith('/api/films/')) and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                return error(403, 'legacy_write_disabled', 'Écriture legacy désactivée en mode Enterprise.')
 
     @app.errorhandler(StorageError)
     def storage_error(exc):
@@ -62,7 +74,11 @@ def create_app(config=None):
 
     @app.get('/health')
     def health():
-        repo.execute(lambda films: (None, False))
+        if app.config['ENTERPRISE_ENABLED'] is True:
+            from .enterprise_auth import check_store
+            check_store()
+        else:
+            repo.execute(lambda films: (None, False))
         return {'status': 'ok'}
 
     @app.get('/api/films')

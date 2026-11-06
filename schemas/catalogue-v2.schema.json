@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:cinevault:catalogue:2",
-  "title": "CineVault v2 - sous-ensemble catalogue",
+  "title": "CineVault v2 - catalogue et comptes",
   "description": "Les tableaux réservés aux fonctions futures doivent être vides ; les règles transversales sont contrôlées par validate_document.",
   "type": "object",
   "additionalProperties": false,
@@ -9,9 +9,9 @@
   "properties": {
     "schema_version": {"const": 2},
     "revision": {"type": "integer", "minimum": 0},
-    "users": {"$ref": "#/$defs/reserved"},
-    "sessions": {"$ref": "#/$defs/reserved"},
-    "auth_attempts": {"$ref": "#/$defs/reserved"},
+    "users": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/user"}},
+    "sessions": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/session"}},
+    "auth_attempts": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/attempt"}},
     "idempotency_records": {"$ref": "#/$defs/reserved"},
     "collections": {"$ref": "#/$defs/reserved"},
     "loans": {"$ref": "#/$defs/reserved"},
@@ -21,6 +21,41 @@
     "copies": {"type": "array", "items": {"$ref": "#/$defs/copy"}}
   },
   "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "integer", "minimum": 0},
+    "user": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "username", "display_name", "password_hash", "role", "enabled", "created_at"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "username": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$"},
+        "display_name": {"$ref": "#/$defs/shortText"},
+        "password_hash": {"type": "string", "pattern": "^\\$argon2id\\$", "maxLength": 512},
+        "role": {"enum": ["member", "manager", "admin"]},
+        "enabled": {"type": "boolean"},
+        "created_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "session": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "user_id", "token_hash", "created_at", "last_seen", "expires_at"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "user_id": {"$ref": "#/$defs/id"},
+        "token_hash": {"$ref": "#/$defs/digest"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "last_seen": {"$ref": "#/$defs/timestamp"},
+        "expires_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "attempt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key", "window_start", "count"],
+      "properties": {
+        "key": {"$ref": "#/$defs/digest"},
+        "window_start": {"$ref": "#/$defs/timestamp"},
+        "count": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
     "reserved": {"type": "array", "maxItems": 0},
     "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
     "shortText": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"},
