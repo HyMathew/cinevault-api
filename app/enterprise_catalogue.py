@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request, url_for
 
 from .enterprise_auth import check_store, error, forbidden, no_cache, payload, protected
 from .validation import ValidationError, is_unicode, validate
+from .metadata_model import valid_source
 
 bp = Blueprint('enterprise_catalogue', __name__, url_prefix='/api/v1')
 bp.after_request(no_cache)
@@ -66,8 +67,38 @@ def movie_data(data):
         raise ValidationError({'genres':'Liste de genres invalide.'})
     if len({g.casefold() for g in genres}) != len(genres):
         raise ValidationError({'genres':'Les genres doivent être distincts.'})
-    return {'title':legacy['titre'],'year':legacy['annee'],'director':legacy['realisateur'],
+    result={'title':legacy['titre'],'year':legacy['annee'],'director':legacy['realisateur'],
             'actors':legacy['acteurs'],'synopsis':legacy['synopsis'],'genres':genres}
+    if 'external_source' in data:
+        if not valid_source(data['external_source']): raise ValidationError({'external_source':'Provenance invalide.'})
+        result['external_source']=data['external_source']
+    return result
+
+
+def prepare_movie(optional,movie_id=None):
+    def parse(document,user):
+        if movie_id is not None:
+            movie=lookup(document,'movies',movie_id)
+            if movie is None: return missing()
+            conflict=precondition(movie)
+            if conflict: return conflict
+        return {'data':payload(MOVIE_FIELDS,optional)}
+    gate=management(parse)
+    if not isinstance(gate,dict): return gate
+    data=gate['data']
+    attributes=movie_data(data)
+    initial=copy_data(data['initial_copy']) if 'initial_copy' in data else None
+    if 'external_id' in data:
+        if data['external_id'] is None: attributes['external_source']=None
+        else:
+            from .enterprise_metadata import load_detail,metadata_failure
+            from .metadata import MetadataUnavailable
+            try:
+                film=load_detail(data['external_id'])['film']
+            except MetadataUnavailable as exc:
+                return metadata_failure(exc)
+            attributes['external_source']={'qid':film['id'],'revision':film['revision'],'retrieved_at':film['retrieved_at']}
+    return {'attributes':attributes,'initial_copy':initial}
 
 
 def copy_data(data):
@@ -131,10 +162,11 @@ def get_movie(movie_id):
 
 @bp.post('/movies')
 def create_movie():
+    prepared=prepare_movie(('genres','initial_copy','external_id'))
+    if not isinstance(prepared,dict): return prepared
     def create(document, user):
-        data = payload(MOVIE_FIELDS, ('genres','initial_copy'))
-        movie = movie_data(data)
-        initial_copy = copy_data(data['initial_copy']) if 'initial_copy' in data else None
+        movie = prepared['attributes']
+        initial_copy = prepared['initial_copy']
         if duplicate(document,movie):
             return error(409,'duplicate','Ce film existe déjà.')
         movie['id'] = str(uuid.uuid4())
@@ -147,6 +179,8 @@ def create_movie():
 
 @bp.put('/movies/<movie_id>')
 def replace_movie(movie_id):
+    prepared=prepare_movie(('genres','external_id'),movie_id)
+    if not isinstance(prepared,dict): return prepared
     def replace(document, user):
         movie = lookup(document,'movies',movie_id)
         if movie is None:
@@ -154,7 +188,7 @@ def replace_movie(movie_id):
         conflict = precondition(movie)
         if conflict:
             return conflict
-        data = movie_data(payload(MOVIE_FIELDS, ('genres',)))
+        data = prepared['attributes']
         if duplicate(document,data,movie_id):
             return error(409,'duplicate','Ce film existe déjà.')
         movie.update(data)

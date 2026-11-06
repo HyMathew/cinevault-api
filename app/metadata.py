@@ -7,15 +7,15 @@ import json
 from pathlib import Path
 import re
 import time
-from urllib.parse import parse_qsl,quote,urlsplit,urlunsplit
+from urllib.parse import parse_qsl,quote,unquote,urlsplit,urlunsplit
 
 import portalocker
 
 from .repository import unique_pairs
 from .storage_v2 import _replace
 from .validation import is_unicode
+from .metadata_model import QID
 
-QID=re.compile(r'Q[1-9][0-9]{0,11}')
 TTL=86400
 GRACE=7*86400
 
@@ -148,6 +148,29 @@ def normalize_poster(filename,info):
         'attribution_required':value('AttributionRequired').lower()!='false'}
 
 
+def validated_poster(value):
+    """Check cached links again before exposing them to public templates."""
+    fields={'image_url','source_url','artist','license','license_url','attribution_required'}
+    if not isinstance(value,dict) or set(value)!=fields or type(value['attribution_required']) is not bool:
+        return None
+    if any(not isinstance(value[key],str) for key in fields-{'attribution_required'}): return None
+    try:
+        source=urlsplit(value['source_url'])
+        image=urlsplit(value['image_url'])
+    except ValueError:
+        return None
+    if source.scheme!='https' or source.netloc!='commons.wikimedia.org' or source.query or source.fragment or not source.path.startswith('/wiki/File:'):
+        return None
+    filename=unquote(source.path[len('/wiki/File:'):])
+    extension=image.path.rsplit('.',1)[-1].lower()
+    mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}.get(extension)
+    checked=normalize_poster(filename,{'thumburl':value['image_url'],'thumbmime':mime,
+        'extmetadata':{key:{'value':text} for key,text in {
+            'Artist':value['artist'],'LicenseShortName':value['license'],'LicenseUrl':value['license_url'],
+            'AttributionRequired':'true' if value['attribution_required'] else 'false'}.items()}})
+    return checked if checked==value else None
+
+
 class MetadataCache:
     def __init__(self,path,clock=time.time):
         self.path=Path(path); self.clock=clock
@@ -189,14 +212,21 @@ class MetadataCache:
         if count: state['count']+=1
 
     def peek(self,key):
+        return self.peek_many([key]).get(key)
+
+    def peek_many(self,keys):
         try:
             now=int(self.clock())
-            if not self.path.exists(): return None
+            if not self.path.exists(): return {}
             with portalocker.Lock(str(self.path)+'.lock',mode='a',timeout=2):
-                entry=self.read(now)['entries'].get(hashlib.sha256(key.encode('utf-8')).hexdigest())
-                return copy.deepcopy(entry['value']) if entry and entry['expires_at']>now else None
+                entries=self.read(now)['entries']
+                result={}
+                for key in set(keys):
+                    entry=entries.get(hashlib.sha256(key.encode('utf-8')).hexdigest())
+                    if entry and entry['expires_at']>now: result[key]=copy.deepcopy(entry['value'])
+                return result
         except (OSError,ValueError,RecursionError,portalocker.exceptions.LockException,MetadataUnavailable):
-            return None
+            return {}
 
     def fetch(self,key,fetch):
         try:

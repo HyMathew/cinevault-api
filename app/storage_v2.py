@@ -14,6 +14,7 @@ from .validation import ValidationError, is_unicode, validate
 from .auth_storage import validate_auth
 from .business_storage import validate_business
 from .receipt_storage import validate_receipts
+from .metadata_model import valid_source
 
 COLLECTIONS = ('users', 'sessions', 'auth_attempts', 'idempotency_records', 'movies',
                'copies', 'collections', 'loans', 'reservations', 'audit_events')
@@ -42,8 +43,11 @@ def validate_document(data):
     ids = set()
     movie_ids = set()
     for movie in data['movies']:
-        if not isinstance(movie, dict) or set(movie) != {'id', 'title', 'year', 'director', 'actors', 'synopsis', 'genres'}:
+        required={'id', 'title', 'year', 'director', 'actors', 'synopsis', 'genres'}
+        if not isinstance(movie, dict) or not required.issubset(movie) or set(movie)-required-{'external_source'}:
             raise ValueError('Invalid movie fields')
+        if 'external_source' in movie and not valid_source(movie['external_source']):
+            raise ValueError('Invalid external source')
         if not _valid_uuid(movie['id']) or movie['id'] in ids:
             raise ValueError('Invalid or duplicate id')
         ids.add(movie['id'])

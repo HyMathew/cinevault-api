@@ -23,7 +23,6 @@
           "director",
           "actors",
           "synopsis",
-          "genres",
           "copies"
         ],
         "properties": {
@@ -103,6 +102,9 @@
                 }
               }
             }
+          },
+          "external_source": {
+            "$ref": "#/$defs/external_source"
           }
         }
       }
@@ -118,6 +120,38 @@
       "minLength": 1,
       "maxLength": 120,
       "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "external_source": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qid",
+            "revision",
+            "retrieved_at"
+          ],
+          "properties": {
+            "qid": {
+              "type": "string",
+              "pattern": "^Q[1-9][0-9]{0,11}$"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000000000
+            },
+            "retrieved_at": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740992
+            }
+          }
+        }
+      ]
     }
   }
 }

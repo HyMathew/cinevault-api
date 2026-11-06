@@ -424,6 +424,9 @@
                 "description": "URI de la ressource créée"
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
           }
         },
         "requestBody": {
@@ -2370,6 +2373,170 @@
           }
         }
       }
+    },
+    "/api/v1/metadata/search": {
+      "get": {
+        "operationId": "searchExternalFilms",
+        "description": "Manager/admin. Recherche Wikidata filtrée film ; configuration opt-in, réseau hors verrou métier, identité et rôle revérifiés après attente.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "description": "Quota ou attente fournisseur",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3600
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Résultat JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataSearch"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metadata/{identity}": {
+      "get": {
+        "operationId": "getExternalFilm",
+        "description": "Manager/admin. Proposition de champs à revoir, description courte, provenance/révision et affiche éventuelle déclarée réutilisable par Commons. Un cache de secours est explicitement marqué stale.",
+        "parameters": [
+          {
+            "name": "identity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^Q[1-9][0-9]{0,11}$"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "description": "Quota ou attente fournisseur",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3600
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Résultat JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/posters": {
+      "get": {
+        "operationId": "getCachedPosters",
+        "description": "Public. Une seule lecture du cache local frais ; aucun appel externe. QID et révision sélectionnés doivent correspondre. Cache indisponible ou source absente : dictionnaire vide, catalogue toujours utilisable.",
+        "parameters": [
+          {
+            "name": "movie_id",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Résultat JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Posters"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
     }
   },
   "security": [
@@ -2525,6 +2692,9 @@
               "maxLength": 80,
               "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
             }
+          },
+          "external_source": {
+            "$ref": "#/components/schemas/ExternalSource"
           }
         }
       },
@@ -2623,6 +2793,9 @@
           "_etag": {
             "type": "string",
             "pattern": "^\"[0-9a-f]{64}\"$"
+          },
+          "external_source": {
+            "$ref": "#/components/schemas/ExternalSource"
           }
         }
       },
@@ -2716,6 +2889,18 @@
               "maxLength": 80,
               "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
             }
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^Q[1-9][0-9]{0,11}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "QID sélectionné ; provenance relue côté serveur hors verrou métier. null retire l’association ; omission conserve celle existante en modification."
           }
         }
       },
@@ -2799,6 +2984,18 @@
           },
           "initial_copy": {
             "$ref": "#/components/schemas/CopyInput"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^Q[1-9][0-9]{0,11}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "QID sélectionné ; provenance relue côté serveur hors verrou métier. null retire l’association ; omission conserve celle existante en modification."
           }
         }
       },
@@ -4206,7 +4403,6 @@
                 "director",
                 "actors",
                 "synopsis",
-                "genres",
                 "copies"
               ],
               "properties": {
@@ -4286,6 +4482,9 @@
                       }
                     }
                   }
+                },
+                "external_source": {
+                  "$ref": "#/components/schemas/ExternalSource"
                 }
               }
             }
@@ -4815,6 +5014,306 @@
             "const": "content-rules-v1"
           }
         }
+      },
+      "ExternalSource": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "qid",
+              "revision",
+              "retrieved_at"
+            ],
+            "properties": {
+              "qid": {
+                "type": "string",
+                "pattern": "^Q[1-9][0-9]{0,11}$"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000000000
+              },
+              "retrieved_at": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740992
+              }
+            }
+          }
+        ]
+      },
+      "Poster": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "pattern": "^https://(?:upload|thumb)\\.wikimedia\\.org/wikipedia/commons/"
+          },
+          "source_url": {
+            "type": "string",
+            "pattern": "^https://commons\\.wikimedia\\.org/wiki/File:"
+          },
+          "artist": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "license": {
+            "enum": [
+              "CC0",
+              "CC BY 4.0",
+              "CC BY-SA 4.0",
+              "CC BY 3.0",
+              "CC BY-SA 3.0",
+              "Public domain"
+            ]
+          },
+          "license_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "attribution_required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "image_url",
+          "source_url",
+          "artist",
+          "license",
+          "license_url",
+          "attribution_required"
+        ]
+      },
+      "MetadataDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "film": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^Q[1-9][0-9]{0,11}$"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "year": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1888,
+                    "maximum": 2100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "director": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "actors": {
+                "type": "array",
+                "maxItems": 30,
+                "items": {
+                  "type": "string",
+                  "maxLength": 120
+                }
+              },
+              "genres": {
+                "type": "array",
+                "maxItems": 30,
+                "items": {
+                  "type": "string",
+                  "maxLength": 80
+                }
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "poster_filename": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "poster": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Poster"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000000000
+              },
+              "retrieved_at": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740992
+              },
+              "source_url": {
+                "type": "string",
+                "pattern": "^https://www\\.wikidata\\.org/wiki/Q[1-9][0-9]*$"
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 240
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "year",
+              "director",
+              "actors",
+              "genres",
+              "description",
+              "poster_filename",
+              "poster",
+              "revision",
+              "retrieved_at",
+              "source_url",
+              "warnings"
+            ]
+          },
+          "cache": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "enum": [
+                  "fresh",
+                  "stale"
+                ]
+              },
+              "stored_at": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740992
+              },
+              "hit": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "status",
+              "stored_at",
+              "hit"
+            ]
+          }
+        },
+        "required": [
+          "film",
+          "cache"
+        ]
+      },
+      "MetadataSearch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^Q[1-9][0-9]{0,11}$"
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "source_url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description",
+                "source_url"
+              ]
+            }
+          },
+          "cache": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "enum": [
+                  "fresh",
+                  "stale"
+                ]
+              },
+              "stored_at": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740992
+              },
+              "hit": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "status",
+              "stored_at",
+              "hit"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "cache"
+        ]
+      },
+      "Posters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "posters": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Poster"
+            }
+          }
+        },
+        "required": [
+          "posters"
+        ]
       }
     },
     "responses": {

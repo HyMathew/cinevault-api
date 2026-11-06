@@ -339,3 +339,5 @@ def install_enterprise(app):
     app.register_blueprint(transfer_bp)
     from .enterprise_insights import bp as insights_bp
     app.register_blueprint(insights_bp)
+    from .enterprise_metadata import install_metadata
+    install_metadata(app)

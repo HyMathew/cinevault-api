@@ -11,7 +11,7 @@ Mode Enterprise. Gestionnaire ou administrateur uniquement ; identité et rôle 
 
 ## JSON versionné
 
-`{format_version:1,movies:[...]}` ; chaque film contient `title,year,director,actors,synopsis,copies`, et éventuellement `genres,id`. Chaque copie contient `support,location,condition` et éventuellement `id`. Champs inconnus interdits, y compris les tableaux privés. UTF-8 valide, entiers réels (booléens refusés), limites de champs du catalogue, clés JSON dupliquées et NaN rejetés. `genres` omis devient `[]`.
+`{format_version:1,movies:[...]}` ; chaque film contient `title,year,director,actors,synopsis,copies`, et éventuellement `genres,id,external_source`. L'annotation externe est `{qid,revision,retrieved_at}` ou null ; les valeurs sont validées sans I/O externe. Chaque copie contient `support,location,condition` et éventuellement `id`. Champs inconnus interdits, y compris les tableaux privés. UTF-8 valide, entiers réels (booléens refusés), limites de champs du catalogue, clés JSON dupliquées et NaN rejetés. `genres` omis devient `[]`.
 
 Le schéma `schemas/catalogue-transfer-v1.schema.json` et son exemple décrivent ce format, distinct du document interne v2. Les identifiants fournis doivent être des UUID canoniques uniques dans le fichier et sans collision globale. Les identifiants exportés peuvent ainsi être préservés dans un nouveau catalogue. Les références et identifiants des autres entités ne sont jamais importés.
 
@@ -22,6 +22,8 @@ UTF-8 avec ou sans un BOM initial, séparateur **virgule**, guillemet double sta
 ```text
 movie_id,copy_id,title,year,director,actors,genres,synopsis,support,location,condition
 ```
+
+Une variante ajoute la colonne finale `external_source`, objet JSON compact ou null. L'export choisit cette variante si un film porte l'annotation ; l'en-tête historique reste accepté. Une cellule vide signifie champ absent, `null` signifie retrait explicite. Les anciens lecteurs stricts doivent être mis à jour pour lire les exports enrichis.
 
 Une ligne par exemplaire. Les quatre champs `copy_id,support,location,condition` tous vides représentent un film sans exemplaire. Dès qu'un de ces champs est rempli, tous les attributs de copie sont validés. `movie_id` et `copy_id` sont facultatifs à l'import. `actors` et `genres` sont des tableaux JSON de chaînes dans la cellule, donc cités/échappés selon CSV. Les retours à la ligne et les virgules dans les champs sont pris en charge. Les colonnes supplémentaires, absentes, CSV malformé et métadonnées contradictoires pour un film groupé sont rejetés.
 

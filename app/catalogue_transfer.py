@@ -10,6 +10,7 @@ from .repository import unique_pairs
 from .validation import ValidationError
 
 COLUMNS=('movie_id','copy_id','title','year','director','actors','genres','synopsis','support','location','condition')
+EXTENDED_COLUMNS=(*COLUMNS,'external_source')
 MAX_MOVIES=1000
 MAX_COPIES=5000
 
@@ -47,7 +48,7 @@ def normalize(content):
     ids,keys=set(),set()
     count=0
     for item in content['movies']:
-        if not isinstance(item,dict) or not set((*MOVIE_FIELDS,'copies')).issubset(item) or set(item)-set((*MOVIE_FIELDS,'copies','genres','id')) or not isinstance(item['copies'],list):
+        if not isinstance(item,dict) or not set((*MOVIE_FIELDS,'copies')).issubset(item) or set(item)-set((*MOVIE_FIELDS,'copies','genres','id','external_source')) or not isinstance(item['copies'],list):
             invalid()
         movie=movie_data(item)
         if 'id' in item:
@@ -82,17 +83,20 @@ def parse_csv(content):
         invalid()
     try:
         reader=csv.reader(io.StringIO(content.removeprefix('\ufeff'),newline=''),strict=True)
-        if tuple(next(reader))!=COLUMNS:
+        columns=tuple(next(reader))
+        if columns not in (COLUMNS,EXTENDED_COLUMNS):
             invalid()
         grouped={}
         for index,values in enumerate(reader):
-            if index>=MAX_MOVIES+MAX_COPIES or len(values)!=len(COLUMNS):
+            if index>=MAX_MOVIES+MAX_COPIES or len(values)!=len(columns):
                 invalid()
-            row=dict(zip(COLUMNS,values))
+            row=dict(zip(columns,values))
             if not row['year'].isascii() or not row['year'].isdigit():
                 invalid()
             metadata={'title':row['title'],'year':int(row['year']),'director':row['director'],
                 'actors':load_json(row['actors']),'genres':load_json(row['genres']),'synopsis':row['synopsis']}
+            if row.get('external_source',''):
+                metadata['external_source']=load_json(row['external_source'])
             key=('id',row['movie_id']) if row['movie_id'] else ('natural',row['title'].strip().casefold(),metadata['year'],row['director'].strip().casefold())
             if key not in grouped:
                 grouped[key]={**metadata,'copies':[]}
@@ -111,7 +115,7 @@ def parse_csv(content):
 
 
 def export_document(document):
-    return {'format_version':1,'movies':[{**{k:movie[k] for k in ('id',*MOVIE_FIELDS,'genres')},'copies':[
+    return {'format_version':1,'movies':[{**{k:movie[k] for k in ('id',*MOVIE_FIELDS,'genres','external_source') if k in movie},'copies':[
         {k:entry[k] for k in ('id',*COPY_FIELDS)} for entry in document['copies'] if entry['movie_id']==movie['id']
     ]} for movie in document['movies']]}
 
@@ -126,14 +130,17 @@ def csv_safe(value):
 def export_csv(content):
     output=io.StringIO(newline='')
     writer=csv.writer(output,quoting=csv.QUOTE_ALL)
-    writer.writerow(COLUMNS)
+    columns=EXTENDED_COLUMNS if any('external_source' in movie for movie in content['movies']) else COLUMNS
+    writer.writerow(columns)
     for movie in content['movies']:
         for entry in movie['copies'] or [None]:
             row={'movie_id':movie['id'],'copy_id':entry['id'] if entry else '',
                 **{k:movie[k] for k in ('title','year','director','synopsis')},
                 'actors':json.dumps(movie['actors'],ensure_ascii=False),'genres':json.dumps(movie['genres'],ensure_ascii=False),
                 **{k:entry[k] if entry else '' for k in COPY_FIELDS}}
-            writer.writerow([csv_safe(row[k]) for k in COLUMNS])
+            if columns==EXTENDED_COLUMNS:
+                row['external_source']=json.dumps(movie['external_source'],ensure_ascii=False,separators=(',',':')) if 'external_source' in movie else ''
+            writer.writerow([csv_safe(row[k]) for k in columns])
     return '\ufeff'+output.getvalue()
 
 
