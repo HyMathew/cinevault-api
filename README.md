@@ -1,6 +1,18 @@
 # CineVault API
 
-API Flask pour une vidéothèque JSON. Elle appartient au tiers de données ; elle ne fournit ni authentification ni TLS. Ne pas exposer directement son port à un réseau non fiable. Le frontend y accède sur le réseau privé de l'application.
+API Flask du tiers données de CineVault. Deux modes explicites : le catalogue pédagogique legacy, sans authentification par défaut, et Enterprise opt-in avec comptes, catalogue partagé, exemplaires, collections privées et prêts. Le stockage principal reste JSON. TLS n'est pas fourni par l'application : ne pas exposer directement son port à un réseau non fiable. Le frontend y accède sur le réseau privé de l'application.
+
+## Mode Enterprise
+
+Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 déjà initialisé ou migré, et `AUTH_THROTTLE_KEY_FILE` vers un fichier privé d'au moins 32 octets. Aucun fichier manquant n'est recréé silencieusement. Le premier administrateur se crée par l'outil local interactif `python -m app.bootstrap --store <chemin>` ; aucun compte ou secret prédéfini. Les mutations des routes legacy sont refusées dans ce mode ; les lectures legacy conservent leur fichier pédagogique distinct.
+
+- [Comptes et sessions](docs/auth-contract.md), [protections et limites](docs/accounts-milestone.md).
+- [Catalogue et exemplaires versionnés](docs/catalogue-v1-contract.md).
+- [Collections privées et audit minimal](docs/collections-contract.md).
+- [Prêts réalisés et réservations encore à implémenter](docs/lending-contract.md).
+- [Spécification OpenAPI](docs/openapi-v1.json), schéma de stockage sous `schemas/`.
+
+Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Une seule réplique API détient ce fichier. Le jalon reste en développement : réservations, imports, fournisseur externe, recommandations, statistiques complètes et audit final ne sont pas encore disponibles.
 
 ## Lancement et tests
 
@@ -10,7 +22,7 @@ Python 3.13 : créer un environnement virtuel, puis `python -m pip install -r re
 
 La sonde vérifie que le document est lisible et valide et que l'initialisation peut être effectuée ; elle ne prouve pas que le système peut continuer à écrire après une panne. En cas d'erreur après remplacement mais avant synchronisation du répertoire, une requête peut signaler l'échec bien que la modification soit déjà visible : ne pas réessayer automatiquement les mutations, vérifier d'abord l'état.
 
-## Contrat
+## Contrat pédagogique legacy
 
 | Méthode | Chemin | Résultat |
 |---|---|---|
@@ -29,13 +41,15 @@ Corps d'entrée JSON : `titre` (1–200), `annee` (entier 1888–2100), `realisa
 
 Erreurs au format `{"error":{"code":"validation_error","message":"Données invalides.","fields":{"titre":"..."}}}` ; `fields` est facultatif. HTTP 400 JSON malformé, 415 type incompatible, 422 validation, 413 taille excessive, 404 absent, 405 méthode interdite, 503 stockage indisponible, 500 erreur interne. Les noms de champ ou messages ne contiennent aucun secret.
 
-## Socle de stockage v2 : expérimental et non raccordé à HTTP
+## Stockage v2 et migration
 
-`app/storage_v2.py` et `app/migrate_v2.py` constituent un jalon isolé. Les routes et fichiers legacy continuent de fonctionner comme avant, sans comptes ni contrôle d'accès ; **ne pas exposer leurs mutations à un réseau non fiable**. Le schéma `schemas/catalogue-v2.schema.json` et l'exemple fictif associé décrivent les films et exemplaires actuellement pris en charge. Les tableaux `users`, `sessions`, `auth_attempts`, `idempotency_records`, `collections`, `loans`, `reservations` et `audit_events` sont réservés et doivent rester vides ; ils n'implémentent aucune de ces fonctionnalités. La validation Python contrôle aussi l'encodage UTF-8, les identifiants uniques, les entiers Python et les références film/exemplaire, propriétés que le schéma seul ne garantit pas.
+`app/storage_v2.py` et `app/migrate_v2.py` fournissent le document transactionnel versionné et sa migration. Les routes Enterprise sont raccordées à ce document ; le mode legacy conserve son fichier distinct et ses mutations ne sont permises que lorsque Enterprise est désactivé. Le schéma et les exemples sous `schemas/` décrivent comptes, sessions, compteurs anti-abus, films, exemplaires, collections, prêts et audit minimal. Les tableaux `idempotency_records` et `reservations` restent réservés et doivent être vides. La validation Python contrôle aussi UTF-8, unicité, références, transitions cohérentes et dates, propriétés que le schéma seul ne garantit pas.
 
 `V2Store(path).initialize()` crée explicitement un document vierge sans écraser une cible. `read()` refuse un fichier manquant ou invalide. `transact(callback)` verrouille, lit, appelle le traitement, valide l'ensemble, incrémente la révision et remplace atomiquement le document ; une exception avant remplacement laisse l'ancien contenu. Le callback ne doit pas faire d'I/O externe ni retenir de référence mutable ; toute règle métier future et autorisation devra être vérifiée dans cette même transaction. Le stockage est à instance API unique sur un seul volume local ; aucune réplication ou haute disponibilité.
 
 Pour sauvegarder : `digest = store.snapshot(destination_absente)` prend sous verrou une copie validée sans écraser la cible ; `V2Store(cible_absente).restore(snapshot, digest)` vérifie SHA-256 et schéma avant restauration sans écraser. La valeur de contrôle doit être conservée séparément dans un endroit fiable. Le stockage, les sauvegardes et les répertoires doivent être protégés par des permissions adaptées ; SHA-256 seul n'assure pas leur authenticité face à un acteur malveillant.
+
+Une sauvegarde Enterprise contient des hachages de mots de passe et des empreintes de sessions : elle est confidentielle. La primitive restaure les octets validés, y compris l'ancien état de comptes/sessions. Une procédure de remise en service doit donc traiter explicitement la révocation des sessions et la récupération des comptes ; cette procédure opérationnelle complète reste à réaliser avant un usage de production.
 
 Migration réservée à un opérateur après arrêt complet des anciennes écritures et sauvegarde vérifiée : `report = create_candidate(source_legacy, candidat_absent)` crée à côté un candidat v2, conserve l'identifiant de chaque film, crée un exemplaire au support d'origine avec identifiant déterministe et n'altère pas la source. Inspecter/valider les nombres et les empreintes avant `promote_candidate(candidat, cible_absente, source=source_legacy, expected_source_sha256=report['source_sha256'], expected_candidate_sha256=report['candidate_sha256'])`. La promotion prend les verrous source puis cible, vérifie les deux empreintes et ne remplace jamais une cible existante. L'ancien service doit rester arrêté pendant et après le basculement : le verrou ne l'empêche pas de réécrire le legacy après la promotion. Ne jamais lancer la migration sur un catalogue réel sans sauvegarde et plan de retour testés.
 
