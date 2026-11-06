@@ -12,9 +12,10 @@ Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 d
 - [Prêts et réservations](docs/lending-contract.md), [file et expiration](docs/reservations.md).
 - [Protection des créations contre les doubles envois](docs/idempotency.md).
 - [Import/export JSON et CSV du catalogue](docs/import-export-contract.md).
+- [Statistiques et recommandations explicables](docs/insights-contract.md).
 - [Spécification OpenAPI](docs/openapi-v1.json), schéma de stockage sous `schemas/`.
 
-Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Une seule réplique API détient ce fichier. Le projet reste en développement : fournisseur externe, recommandations, statistiques complètes et audit final ne sont pas encore disponibles.
+Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Une seule réplique API détient ce fichier. Le projet reste en développement : fournisseur externe, contrôles navigateur complets, infrastructure distribuée et audit final restent à terminer.
 
 ## Lancement et tests
 

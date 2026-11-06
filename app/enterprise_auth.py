@@ -337,3 +337,5 @@ def install_enterprise(app):
     app.register_blueprint(reservations_bp)
     from .enterprise_transfer import bp as transfer_bp
     app.register_blueprint(transfer_bp)
+    from .enterprise_insights import bp as insights_bp
+    app.register_blueprint(insights_bp)

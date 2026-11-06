@@ -2270,6 +2270,106 @@
           }
         }
       }
+    },
+    "/api/v1/statistics": {
+      "get": {
+        "operationId": "getStatistics",
+        "description": "Statistiques sous verrou. Collections et historique personnels toujours limités à l’acteur ; all exige manager/admin et ajoute des agrégats d’exploitation sans collections privées tierces. Activité du journal conservé, sept jours glissants.",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "mine",
+                "all"
+              ],
+              "default": "mine"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Calcul sur le document courant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Statistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recommendations": {
+      "get": {
+        "operationId": "getRecommendations",
+        "description": "Règles de contenu explicables, aucune donnée privée des tiers. Les genres choisis influencent le score sans filtrer. Score additif et déterministe, aucune probabilité ni apprentissage automatique.",
+        "parameters": [
+          {
+            "name": "genre",
+            "in": "query",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "default": 12
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Calcul sur le document courant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recommendations"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [
@@ -4289,6 +4389,425 @@
               "cinevault-catalogue.json",
               "cinevault-catalogue.csv"
             ]
+          }
+        }
+      },
+      "Statistics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "as_of",
+          "catalogue",
+          "personal"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "catalogue": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "movies",
+              "copies",
+              "by_support",
+              "by_genre",
+              "damaged",
+              "free",
+              "held_for_queue",
+              "available"
+            ],
+            "properties": {
+              "movies": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "copies": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_support": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "numerique",
+                  "dvd",
+                  "blu-ray",
+                  "vhs",
+                  "autre"
+                ],
+                "properties": {
+                  "numerique": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dvd": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "blu-ray": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "vhs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "autre": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "by_genre": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "damaged": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "free": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "held_for_queue": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "available": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "personal": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "collection_entries",
+              "collection_movies",
+              "by_kind",
+              "by_owned_support",
+              "loans",
+              "overdue",
+              "waiting_reservations",
+              "activity_retained",
+              "activity_last_7_days",
+              "recent_activity"
+            ],
+            "properties": {
+              "collection_entries": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "collection_movies": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_kind": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "owned",
+                  "favorite",
+                  "watched",
+                  "watchlist",
+                  "custom"
+                ],
+                "properties": {
+                  "owned": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "favorite": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "watched": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "watchlist": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "custom": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "by_owned_support": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "numerique",
+                  "dvd",
+                  "blu-ray",
+                  "vhs",
+                  "autre"
+                ],
+                "properties": {
+                  "numerique": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dvd": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "blu-ray": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "vhs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "autre": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "loans": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pending",
+                  "active",
+                  "returned",
+                  "cancelled"
+                ],
+                "properties": {
+                  "pending": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "active": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "returned": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "cancelled": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "overdue": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "waiting_reservations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activity_retained": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activity_last_7_days": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "recent_activity": {
+                "type": "array",
+                "maxItems": 10,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "action",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "movie.created",
+                        "movie.updated",
+                        "movie.deleted",
+                        "copy.created",
+                        "copy.updated",
+                        "copy.deleted",
+                        "collection.created",
+                        "collection.updated",
+                        "collection.deleted",
+                        "loan.requested",
+                        "loan.approved",
+                        "loan.returned",
+                        "loan.cancelled",
+                        "reservation.created",
+                        "reservation.fulfilled",
+                        "reservation.cancelled",
+                        "reservation.expired",
+                        "import.completed",
+                        "import.failed",
+                        "export.completed"
+                      ]
+                    },
+                    "timestamp": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "operations": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "loans",
+              "overdue",
+              "waiting_reservations",
+              "activity_last_7_days"
+            ],
+            "properties": {
+              "loans": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pending",
+                  "active",
+                  "returned",
+                  "cancelled"
+                ],
+                "properties": {
+                  "pending": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "active": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "returned": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "cancelled": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "overdue": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "waiting_reservations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activity_last_7_days": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "Recommendations": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "recommendations",
+          "total",
+          "limit",
+          "personalized",
+          "method"
+        ],
+        "properties": {
+          "recommendations": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "movie",
+                "score",
+                "reasons",
+                "available_copies"
+              ],
+              "properties": {
+                "movie": {
+                  "$ref": "#/components/schemas/Movie"
+                },
+                "score": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 306
+                },
+                "reasons": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 63,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "code",
+                      "label",
+                      "points"
+                    ],
+                    "properties": {
+                      "code": {
+                        "enum": [
+                          "preferred_genre",
+                          "similar_genre",
+                          "similar_director",
+                          "similar_actors",
+                          "watchlist",
+                          "catalogue"
+                        ]
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "points": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 5
+                      }
+                    }
+                  }
+                },
+                "available_copies": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "personalized": {
+            "type": "boolean"
+          },
+          "method": {
+            "const": "content-rules-v1"
           }
         }
       }
