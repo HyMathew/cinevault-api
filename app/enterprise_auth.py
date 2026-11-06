@@ -75,7 +75,7 @@ def transact(operation):
 
 def check_store():
     try:
-        current_app.extensions['enterprise_store'].read()
+        return current_app.extensions['enterprise_store'].read()
     except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
         current_app.logger.error('Stockage Enterprise indisponible : %s', type(exc).__name__)
         raise ServiceUnavailable('Stockage indisponible.') from exc
@@ -116,13 +116,23 @@ def unauthorized():
     return error(401, 'unauthorized', 'Authentification requise ou invalide.')
 
 
+class InvalidSession(Exception):
+    """Abort a transaction before a rejected identity can cause a disk write."""
+
+
 def protected(operation):
     token, timestamp = bearer(), now()
+    if token_digest(token) is None:
+        return unauthorized()
     def action(doc):
         user, session = find_session(doc, token, timestamp)
-        return None if user is None else operation(doc, user, session)
-    result = transact(action)
-    return unauthorized() if result is None else result
+        if user is None:
+            raise InvalidSession()
+        return operation(doc, user, session)
+    try:
+        return transact(action)
+    except InvalidSession:
+        return unauthorized()
 
 
 def make_user(username, display_name, password, role, timestamp):
@@ -314,3 +324,5 @@ def install_enterprise(app):
     app.extensions['auth_throttle_key'] = key
     app.extensions['auth_dummy_hash'] = hasher.hash(secrets.token_urlsafe(32))
     app.register_blueprint(bp)
+    from .enterprise_catalogue import bp as catalogue_bp
+    app.register_blueprint(catalogue_bp)

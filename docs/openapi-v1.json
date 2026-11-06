@@ -259,6 +259,673 @@
           }
         }
       }
+    },
+    "/api/v1/movies": {
+      "get": {
+        "operationId": "listMovies",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieList"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1888,
+              "maximum": 2100
+            }
+          },
+          {
+            "name": "support",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "numerique",
+                "dvd",
+                "blu-ray",
+                "vhs",
+                "autre"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "title",
+                "-title",
+                "year",
+                "-year"
+              ],
+              "default": "title"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 24
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createMovie",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "description": "Ressource créée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movie"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "URI de la ressource créée"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovieCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/movies/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getMovie",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movie"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              }
+            }
+          }
+        },
+        "security": []
+      },
+      "put": {
+        "operationId": "replaceMovie",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movie"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovieInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag courant de l’entité, guillemets inclus."
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteMovie",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "204": {
+            "description": "Ressource supprimée"
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag courant de l’entité, guillemets inclus."
+          }
+        ]
+      }
+    },
+    "/api/v1/copies": {
+      "get": {
+        "operationId": "listCopies",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyList"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "movie_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createCopy",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "description": "Ressource créée",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Copy"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "URI de la ressource créée"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/copies/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCopy",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Copy"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              }
+            }
+          }
+        },
+        "security": []
+      },
+      "put": {
+        "operationId": "replaceCopy",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Ressource ou liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Copy"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Version de l’entité"
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag courant de l’entité, guillemets inclus."
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteCopy",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "204": {
+            "description": "Ressource supprimée"
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag courant de l’entité, guillemets inclus."
+          }
+        ]
+      }
     }
   },
   "security": [
@@ -349,6 +1016,455 @@
               "fields": {
                 "type": "object"
               }
+            }
+          }
+        }
+      },
+      "Stored_id": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "Stored_shortText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "Stored_movie": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "year",
+          "director",
+          "actors",
+          "synopsis",
+          "genres"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1888,
+            "maximum": 2100
+          },
+          "director": {
+            "$ref": "#/components/schemas/Stored_shortText"
+          },
+          "actors": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/Stored_shortText"
+            }
+          },
+          "synopsis": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "genres": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "Stored_copy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "support",
+          "location",
+          "condition"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "support": {
+            "enum": [
+              "numerique",
+              "dvd",
+              "blu-ray",
+              "vhs",
+              "autre"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "condition": {
+            "enum": [
+              "unknown",
+              "good",
+              "damaged"
+            ]
+          }
+        }
+      },
+      "Movie": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "year",
+          "director",
+          "actors",
+          "synopsis",
+          "genres",
+          "_etag"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1888,
+            "maximum": 2100
+          },
+          "director": {
+            "$ref": "#/components/schemas/Stored_shortText"
+          },
+          "actors": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/Stored_shortText"
+            }
+          },
+          "synopsis": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "genres": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "_etag": {
+            "type": "string",
+            "pattern": "^\"[0-9a-f]{64}\"$"
+          }
+        }
+      },
+      "Copy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "support",
+          "location",
+          "condition",
+          "_etag"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "support": {
+            "enum": [
+              "numerique",
+              "dvd",
+              "blu-ray",
+              "vhs",
+              "autre"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "condition": {
+            "enum": [
+              "unknown",
+              "good",
+              "damaged"
+            ]
+          },
+          "_etag": {
+            "type": "string",
+            "pattern": "^\"[0-9a-f]{64}\"$"
+          }
+        }
+      },
+      "MovieInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "year",
+          "director",
+          "actors",
+          "synopsis"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1888,
+            "maximum": 2100
+          },
+          "director": {
+            "$ref": "#/components/schemas/Stored_shortText"
+          },
+          "actors": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/Stored_shortText"
+            }
+          },
+          "synopsis": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "genres": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "CopyInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "support",
+          "location",
+          "condition"
+        ],
+        "properties": {
+          "support": {
+            "enum": [
+              "numerique",
+              "dvd",
+              "blu-ray",
+              "vhs",
+              "autre"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "condition": {
+            "enum": [
+              "unknown",
+              "good",
+              "damaged"
+            ]
+          }
+        }
+      },
+      "MovieCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "year",
+          "director",
+          "actors",
+          "synopsis"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1888,
+            "maximum": 2100
+          },
+          "director": {
+            "$ref": "#/components/schemas/Stored_shortText"
+          },
+          "actors": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/Stored_shortText"
+            }
+          },
+          "synopsis": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "genres": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "initial_copy": {
+            "$ref": "#/components/schemas/CopyInput"
+          }
+        }
+      },
+      "CopyCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "support",
+          "location",
+          "condition",
+          "movie_id"
+        ],
+        "properties": {
+          "support": {
+            "enum": [
+              "numerique",
+              "dvd",
+              "blu-ray",
+              "vhs",
+              "autre"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "condition": {
+            "enum": [
+              "unknown",
+              "good",
+              "damaged"
+            ]
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          }
+        }
+      },
+      "MovieList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "movies",
+          "total",
+          "limit",
+          "offset",
+          "copy_summaries"
+        ],
+        "properties": {
+          "movies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "copy_summaries": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "count",
+                "supports"
+              ],
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "supports": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "numerique",
+                      "dvd",
+                      "blu-ray",
+                      "vhs",
+                      "autre"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CopyList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "copies"
+        ],
+        "properties": {
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Copy"
             }
           }
         }

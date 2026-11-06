@@ -210,3 +210,13 @@ def test_auth_document_and_responses_match_json_schemas(enterprise):
     public_schema = {**spec['components']['schemas']['Profile'], '$defs':spec['components']['schemas']}
     Draft202012Validator(public_schema).validate(client.get('/api/v1/me', headers=auth).json)
     assert set(profile) == {'id','username','display_name','role','enabled'}
+
+
+def test_invalid_sessions_never_rewrite_the_document(enterprise):
+    client,path = enterprise
+    _,auth = account(client)
+    client.post('/api/v1/auth/logout',headers=auth)
+    before = path.read_bytes()
+    for headers in ({},auth,{'Authorization':'Bearer '+'f' * 43}):
+        assert client.get('/api/v1/me',headers=headers).status_code == 401
+        assert path.read_bytes() == before
