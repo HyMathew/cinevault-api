@@ -59,7 +59,11 @@
       }
     },
     "loans": {
-      "$ref": "#/$defs/reserved"
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/loan"
+      }
     },
     "reservations": {
       "$ref": "#/$defs/reserved"
@@ -429,20 +433,203 @@
             "copy.deleted",
             "collection.created",
             "collection.updated",
-            "collection.deleted"
+            "collection.deleted",
+            "loan.requested",
+            "loan.approved",
+            "loan.returned",
+            "loan.cancelled"
           ]
         },
         "entity_type": {
           "enum": [
             "movie",
             "copy",
-            "collection"
+            "collection",
+            "loan"
           ]
         },
         "timestamp": {
           "$ref": "#/$defs/timestamp"
         }
       }
+    },
+    "loan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "borrower_id",
+        "copy_id",
+        "status",
+        "requested_at",
+        "approved_at",
+        "due_at",
+        "returned_at",
+        "cancelled_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "borrower_id": {
+          "$ref": "#/$defs/id"
+        },
+        "copy_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "active",
+            "returned",
+            "cancelled"
+          ]
+        },
+        "requested_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "approved_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "returned_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cancelled_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "pending"
+            },
+            "copy_id": {
+              "type": "null"
+            },
+            "approved_at": {
+              "type": "null"
+            },
+            "due_at": {
+              "type": "null"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "active"
+            },
+            "copy_id": {
+              "$ref": "#/$defs/id"
+            },
+            "approved_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "due_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "returned"
+            },
+            "copy_id": {
+              "$ref": "#/$defs/id"
+            },
+            "approved_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "due_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "returned_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            },
+            "copy_id": {
+              "type": "null"
+            },
+            "approved_at": {
+              "type": "null"
+            },
+            "due_at": {
+              "type": "null"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      ]
     }
   }
 }

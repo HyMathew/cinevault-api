@@ -2,8 +2,8 @@
 from .validation import SUPPORTS, is_unicode
 
 KINDS = ('owned','favorite','watched','watchlist','custom')
-AUDIT_TYPES = ('movie','copy','collection')
-AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in AUDIT_TYPES for action in ('created','updated','deleted'))
+AUDIT_TYPES = ('movie','copy','collection','loan')
+AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in ('movie','copy','collection') for action in ('created','updated','deleted')) + tuple('loan.'+action for action in ('requested','approved','returned','cancelled'))
 
 
 def valid_collection_attributes(kind, name, supports):
@@ -17,7 +17,7 @@ def valid_collection_attributes(kind, name, supports):
 
 
 def validate_business(document, ids, valid_uuid):
-    if len(document['collections']) > 10000 or len(document['audit_events']) > 2000:
+    if len(document['collections']) > 10000 or len(document['loans']) > 10000 or len(document['audit_events']) > 2000:
         raise ValueError('Business collection limit exceeded')
     users = {u['id'] for u in document['users']}
     movies = {m['id'] for m in document['movies']}
@@ -34,6 +34,47 @@ def validate_business(document, ids, valid_uuid):
             raise ValueError('Duplicate collection entry')
         ids.add(entry['id'])
         keys.add(key)
+    copies = {c['id']:c for c in document['copies']}
+    active_copies,open_pairs = set(),set()
+    pending_counts,active_counts = {},{}
+    for loan in document['loans']:
+        if not isinstance(loan,dict) or set(loan) != {'id','movie_id','borrower_id','copy_id','status','requested_at','approved_at','due_at','returned_at','cancelled_at'}:
+            raise ValueError('Invalid loan fields')
+        if not valid_uuid(loan['id']) or loan['id'] in ids or loan['movie_id'] not in movies or loan['borrower_id'] not in users:
+            raise ValueError('Invalid loan reference')
+        if loan['status'] not in ('pending','active','returned','cancelled') or type(loan['requested_at']) is not int or loan['requested_at'] < 0:
+            raise ValueError('Invalid loan state')
+        for key in ('approved_at','due_at','returned_at','cancelled_at'):
+            if loan[key] is not None and (type(loan[key]) is not int or loan[key] < 0):
+                raise ValueError('Invalid loan timestamp')
+        status = loan['status']
+        if status in ('pending','cancelled'):
+            if any(loan[key] is not None for key in ('copy_id','approved_at','due_at','returned_at')):
+                raise ValueError('Pending loan has an assigned copy')
+            if (status == 'pending' and loan['cancelled_at'] is not None) or (status == 'cancelled' and (loan['cancelled_at'] is None or loan['cancelled_at'] < loan['requested_at'])):
+                raise ValueError('Invalid cancellation')
+        else:
+            copy = copies.get(loan['copy_id'])
+            if not copy or copy['movie_id'] != loan['movie_id'] or loan['approved_at'] is None or loan['due_at'] is None or not loan['requested_at'] <= loan['approved_at'] < loan['due_at'] <= loan['approved_at']+90*86400 or loan['cancelled_at'] is not None:
+                raise ValueError('Invalid assigned loan')
+            if (status == 'active' and loan['returned_at'] is not None) or (status == 'returned' and (loan['returned_at'] is None or loan['returned_at'] < loan['approved_at'])):
+                raise ValueError('Invalid return')
+        borrower = loan['borrower_id']
+        if status in ('pending','active'):
+            pair = (borrower,loan['movie_id'])
+            if pair in open_pairs:
+                raise ValueError('Duplicate open loan')
+            open_pairs.add(pair)
+        if status == 'active':
+            if loan['copy_id'] in active_copies:
+                raise ValueError('Copy loaned twice')
+            active_copies.add(loan['copy_id'])
+            active_counts[borrower] = active_counts.get(borrower,0)+1
+        if status == 'pending':
+            pending_counts[borrower] = pending_counts.get(borrower,0)+1
+        ids.add(loan['id'])
+    if any(count > 5 for count in active_counts.values()) or any(count > 10 for count in pending_counts.values()):
+        raise ValueError('Borrower loan limit exceeded')
     for event in document['audit_events']:
         if not isinstance(event,dict) or set(event) != {'id','actor_id','action','entity_type','entity_id','timestamp'}:
             raise ValueError('Invalid audit event fields')

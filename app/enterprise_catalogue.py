@@ -171,7 +171,7 @@ def delete_movie(movie_id):
         conflict = precondition(movie)
         if conflict:
             return conflict
-        if any(c['movie_id'] == movie_id for c in document['copies']) or any(e['movie_id'] == movie_id for e in document['collections']):
+        if any(c['movie_id'] == movie_id for c in document['copies']) or any(e['movie_id'] == movie_id for e in document['collections']) or any(l['movie_id'] == movie_id for l in document['loans']):
             return error(409,'referenced','Des exemplaires ou collections référencent ce film.')
         document['movies'].remove(movie)
         return '',204
@@ -230,6 +230,8 @@ def delete_copy(copy_id):
         conflict = precondition(copy)
         if conflict:
             return conflict
+        if any(l['copy_id'] == copy_id for l in document['loans']):
+            return error(409,'referenced','Un historique de prêt référence cet exemplaire.')
         document['copies'].remove(copy)
         return '',204
     return management(delete)

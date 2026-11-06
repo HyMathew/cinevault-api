@@ -1305,6 +1305,549 @@
           }
         ]
       }
+    },
+    "/api/v1/loans": {
+      "post": {
+        "operationId": "requestLoan",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "201": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loan"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "movie_id"
+                ],
+                "properties": {
+                  "movie_id": {
+                    "$ref": "#/components/schemas/Stored_id"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listLoans",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanList"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "pending",
+                "active",
+                "returned",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 24
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/loans/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getLoan",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/loans/{id}/approve": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "approveLoan",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loan"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "copy_id",
+                  "due_at"
+                ],
+                "properties": {
+                  "copy_id": {
+                    "$ref": "#/components/schemas/Stored_id"
+                  },
+                  "due_at": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Échéance UTC Unix future, au plus 90 jours après approbation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/loans/{id}/return": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "returnLoan",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loan"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/loans/{id}/cancel": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "cancelLoan",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "412": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Loan"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/availability": {
+      "get": {
+        "operationId": "getAvailability",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Availability"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "movie_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/loans/{id}/options": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getLoanOptions",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanOptions"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [
@@ -1984,14 +2527,19 @@
               "copy.deleted",
               "collection.created",
               "collection.updated",
-              "collection.deleted"
+              "collection.deleted",
+              "loan.requested",
+              "loan.approved",
+              "loan.returned",
+              "loan.cancelled"
             ]
           },
           "entity_type": {
             "enum": [
               "movie",
               "copy",
-              "collection"
+              "collection",
+              "loan"
             ]
           },
           "timestamp": {
@@ -2287,6 +2835,475 @@
           "offset": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "Stored_loan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "borrower_id",
+          "copy_id",
+          "status",
+          "requested_at",
+          "approved_at",
+          "due_at",
+          "returned_at",
+          "cancelled_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "borrower_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "copy_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "active",
+              "returned",
+              "cancelled"
+            ]
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "returned_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "const": "pending"
+              },
+              "copy_id": {
+                "type": "null"
+              },
+              "approved_at": {
+                "type": "null"
+              },
+              "due_at": {
+                "type": "null"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "active"
+              },
+              "copy_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              "approved_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "due_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "returned"
+              },
+              "copy_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              "approved_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "due_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "returned_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              },
+              "copy_id": {
+                "type": "null"
+              },
+              "approved_at": {
+                "type": "null"
+              },
+              "due_at": {
+                "type": "null"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              }
+            }
+          }
+        ]
+      },
+      "Loan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "movie_id",
+          "borrower_id",
+          "copy_id",
+          "status",
+          "requested_at",
+          "approved_at",
+          "due_at",
+          "returned_at",
+          "cancelled_at",
+          "_etag"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "borrower_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "copy_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "active",
+              "returned",
+              "cancelled"
+            ]
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/Stored_timestamp"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "returned_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "_etag": {
+            "type": "string",
+            "pattern": "^\"[0-9a-f]{64}\"$"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "const": "pending"
+              },
+              "copy_id": {
+                "type": "null"
+              },
+              "approved_at": {
+                "type": "null"
+              },
+              "due_at": {
+                "type": "null"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "active"
+              },
+              "copy_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              "approved_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "due_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "returned"
+              },
+              "copy_id": {
+                "$ref": "#/components/schemas/Stored_id"
+              },
+              "approved_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "due_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "returned_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              },
+              "cancelled_at": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              },
+              "copy_id": {
+                "type": "null"
+              },
+              "approved_at": {
+                "type": "null"
+              },
+              "due_at": {
+                "type": "null"
+              },
+              "returned_at": {
+                "type": "null"
+              },
+              "cancelled_at": {
+                "$ref": "#/components/schemas/Stored_timestamp"
+              }
+            }
+          }
+        ]
+      },
+      "LoanList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "loans",
+          "movies",
+          "borrowers",
+          "overdue_ids",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "loans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Loan"
+            }
+          },
+          "movies": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          },
+          "borrowers": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          },
+          "overdue_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/Stored_id"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Availability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "movie_id",
+          "total",
+          "loaned",
+          "free",
+          "reserved",
+          "available"
+        ],
+        "properties": {
+          "movie_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "loaned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "free": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reserved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "available": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "LoanOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "loan_id",
+          "copies"
+        ],
+        "properties": {
+          "loan_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Copy"
+            }
           }
         }
       }

@@ -38,7 +38,7 @@ def validate_document(data):
     for name in COLLECTIONS:
         if not isinstance(data[name], list):
             raise ValueError('Invalid collection')
-        if name not in ('movies', 'copies', 'users', 'sessions', 'auth_attempts', 'collections', 'audit_events') and data[name]:
+        if name not in ('movies', 'copies', 'users', 'sessions', 'auth_attempts', 'collections', 'loans', 'audit_events') and data[name]:
             raise ValueError('Entity not yet supported')
     ids = set()
     movie_ids = set()

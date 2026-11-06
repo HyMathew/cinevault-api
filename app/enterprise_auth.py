@@ -328,3 +328,5 @@ def install_enterprise(app):
     app.register_blueprint(catalogue_bp)
     from .enterprise_collections import bp as collections_bp
     app.register_blueprint(collections_bp)
+    from .enterprise_lending import bp as lending_bp
+    app.register_blueprint(lending_bp)
