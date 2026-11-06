@@ -724,6 +724,14 @@
                   "type": "string"
                 },
                 "description": "URI de la ressource créée"
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "Présent quand le reçu initial est rejoué."
               }
             }
           }
@@ -737,7 +745,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "description": "Clé propre à cet envoi. Même acteur et même contenu : réponse initiale rejouée pendant 24 h ; contenu différent : 409."
+          }
+        ]
       }
     },
     "/api/v1/copies/{id}": {

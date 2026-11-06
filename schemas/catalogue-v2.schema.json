@@ -49,7 +49,11 @@
       }
     },
     "idempotency_records": {
-      "$ref": "#/$defs/reserved"
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/receipt"
+      }
     },
     "collections": {
       "type": "array",
@@ -789,6 +793,90 @@
           }
         }
       ]
+    },
+    "cached_copy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "support",
+        "location",
+        "condition",
+        "_etag"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "support": {
+          "enum": [
+            "numerique",
+            "dvd",
+            "blu-ray",
+            "vhs",
+            "autre"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "condition": {
+          "enum": [
+            "unknown",
+            "good",
+            "damaged"
+          ]
+        },
+        "_etag": {
+          "type": "string",
+          "pattern": "^\"[0-9a-f]{64}\"$"
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "actor_id",
+        "key_hash",
+        "request_hash",
+        "operation",
+        "created_at",
+        "expires_at",
+        "response"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "actor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "key_hash": {
+          "$ref": "#/$defs/digest"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/digest"
+        },
+        "operation": {
+          "const": "copy.create"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "response": {
+          "$ref": "#/$defs/cached_copy"
+        }
+      }
     }
   }
 }

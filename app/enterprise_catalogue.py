@@ -196,14 +196,17 @@ def get_copy(copy_id):
 def create_copy():
     def create(document,user):
         data = payload(('movie_id',*COPY_FIELDS))
-        if not isinstance(data['movie_id'],str):
+        if not isinstance(data['movie_id'],str) or not is_unicode(data['movie_id']):
             raise ValidationError({'movie_id':'Identifiant de film invalide.'})
         attributes = copy_data({k:data[k] for k in COPY_FIELDS})
-        if lookup(document,'movies',data['movie_id']) is None:
-            return missing()
-        copy = {'id':str(uuid.uuid4()),'movie_id':data['movie_id'],**attributes}
-        document['copies'].append(copy)
-        return respond(copy,201,url_for('enterprise_catalogue.get_copy',copy_id=copy['id']))
+        def insert():
+            if lookup(document,'movies',data['movie_id']) is None:
+                return missing()
+            copy = {'id':str(uuid.uuid4()),'movie_id':data['movie_id'],**attributes}
+            document['copies'].append(copy)
+            return respond(copy,201,url_for('enterprise_catalogue.get_copy',copy_id=copy['id']))
+        from .idempotency import create_copy_once
+        return create_copy_once(document,user,data,insert)
     return management(create)
 
 

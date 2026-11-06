@@ -13,6 +13,7 @@ from .repository import unique_pairs
 from .validation import ValidationError, is_unicode, validate
 from .auth_storage import validate_auth
 from .business_storage import validate_business
+from .receipt_storage import validate_receipts
 
 COLLECTIONS = ('users', 'sessions', 'auth_attempts', 'idempotency_records', 'movies',
                'copies', 'collections', 'loans', 'reservations', 'audit_events')
@@ -38,8 +39,6 @@ def validate_document(data):
     for name in COLLECTIONS:
         if not isinstance(data[name], list):
             raise ValueError('Invalid collection')
-        if name not in ('movies', 'copies', 'users', 'sessions', 'auth_attempts', 'collections', 'loans', 'reservations', 'audit_events') and data[name]:
-            raise ValueError('Entity not yet supported')
     ids = set()
     movie_ids = set()
     for movie in data['movies']:
@@ -70,6 +69,7 @@ def validate_document(data):
             raise ValueError('Invalid location')
     validate_auth(data, ids, _valid_uuid)
     validate_business(data, ids, _valid_uuid)
+    validate_receipts(data, ids, _valid_uuid)
     return data
 
 
