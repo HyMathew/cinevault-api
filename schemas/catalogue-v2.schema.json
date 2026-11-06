@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cinevault:catalogue:2",
+  "title": "CineVault v2 - sous-ensemble catalogue",
+  "description": "Les tableaux réservés aux fonctions futures doivent être vides ; les règles transversales sont contrôlées par validate_document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "users", "sessions", "auth_attempts", "idempotency_records", "movies", "copies", "collections", "loans", "reservations", "audit_events"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "revision": {"type": "integer", "minimum": 0},
+    "users": {"$ref": "#/$defs/reserved"},
+    "sessions": {"$ref": "#/$defs/reserved"},
+    "auth_attempts": {"$ref": "#/$defs/reserved"},
+    "idempotency_records": {"$ref": "#/$defs/reserved"},
+    "collections": {"$ref": "#/$defs/reserved"},
+    "loans": {"$ref": "#/$defs/reserved"},
+    "reservations": {"$ref": "#/$defs/reserved"},
+    "audit_events": {"$ref": "#/$defs/reserved"},
+    "movies": {"type": "array", "items": {"$ref": "#/$defs/movie"}},
+    "copies": {"type": "array", "items": {"$ref": "#/$defs/copy"}}
+  },
+  "$defs": {
+    "reserved": {"type": "array", "maxItems": 0},
+    "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "shortText": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"},
+    "movie": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "year", "director", "actors", "synopsis", "genres"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"},
+        "year": {"type": "integer", "minimum": 1888, "maximum": 2100},
+        "director": {"$ref": "#/$defs/shortText"},
+        "actors": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/shortText"}},
+        "synopsis": {"type": "string", "maxLength": 4000},
+        "genres": {"type": "array", "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^\\S(?:[\\s\\S]*\\S)?$"}}
+      }
+    },
+    "copy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "movie_id", "support", "location", "condition"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "movie_id": {"$ref": "#/$defs/id"},
+        "support": {"enum": ["numerique", "dvd", "blu-ray", "vhs", "autre"]},
+        "location": {"type": "string", "maxLength": 200},
+        "condition": {"enum": ["unknown", "good", "damaged"]}
+      }
+    }
+  }
+}
