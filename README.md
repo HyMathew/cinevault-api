@@ -10,10 +10,11 @@ Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 d
 - [Catalogue et exemplaires versionnés](docs/catalogue-v1-contract.md).
 - [Collections privées et audit minimal](docs/collections-contract.md).
 - [Prêts et réservations](docs/lending-contract.md), [file et expiration](docs/reservations.md).
-- [Protection des créations d'exemplaires contre les doubles envois](docs/idempotency.md).
+- [Protection des créations contre les doubles envois](docs/idempotency.md).
+- [Import/export JSON et CSV du catalogue](docs/import-export-contract.md).
 - [Spécification OpenAPI](docs/openapi-v1.json), schéma de stockage sous `schemas/`.
 
-Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Une seule réplique API détient ce fichier. Le projet reste en développement : imports, fournisseur externe, recommandations, statistiques complètes et audit final ne sont pas encore disponibles.
+Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Une seule réplique API détient ce fichier. Le projet reste en développement : fournisseur externe, recommandations, statistiques complètes et audit final ne sont pas encore disponibles.
 
 ## Lancement et tests
 
@@ -44,7 +45,7 @@ Erreurs au format `{"error":{"code":"validation_error","message":"Données inval
 
 ## Stockage v2 et migration
 
-`app/storage_v2.py` et `app/migrate_v2.py` fournissent le document transactionnel versionné et sa migration. Les routes Enterprise sont raccordées à ce document ; le mode legacy conserve son fichier distinct et ses mutations ne sont permises que lorsque Enterprise est désactivé. Le schéma décrit comptes, sessions, compteurs anti-abus, films, exemplaires, collections, prêts, réservations, audit minimal et reçus de création d'exemplaire. Les autres opérations mémorisées restent refusées jusqu'à leur implémentation. La validation Python contrôle aussi UTF-8, unicité, références, transitions cohérentes et dates, propriétés que le schéma seul ne garantit pas. Les exemples par type restent à compléter avant l'audit académique final.
+`app/storage_v2.py` et `app/migrate_v2.py` fournissent le document transactionnel versionné et sa migration. Les routes Enterprise sont raccordées à ce document ; le mode legacy conserve son fichier distinct et ses mutations ne sont permises que lorsque Enterprise est désactivé. Le schéma décrit comptes, sessions, compteurs anti-abus, films, exemplaires, collections, prêts, réservations, audit minimal et reçus de création d'exemplaire ou d'import. Les autres opérations mémorisées restent refusées jusqu'à leur implémentation. La validation Python contrôle aussi UTF-8, unicité, références, transitions cohérentes et dates, propriétés que le schéma seul ne garantit pas. Les exemples par type restent à compléter avant l'audit académique final.
 
 `V2Store(path).initialize()` crée explicitement un document vierge sans écraser une cible. `read()` refuse un fichier manquant ou invalide. `transact(callback)` verrouille, lit, appelle le traitement, valide l'ensemble, incrémente la révision et remplace atomiquement le document ; une exception avant remplacement laisse l'ancien contenu. Le callback ne doit pas faire d'I/O externe ni retenir de référence mutable ; toute règle métier future et autorisation devra être vérifiée dans cette même transaction. Le stockage est à instance API unique sur un seul volume local ; aucune réplication ou haute disponibilité.
 

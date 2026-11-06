@@ -2152,6 +2152,124 @@
           }
         ]
       }
+    },
+    "/api/v1/catalogue/import": {
+      "post": {
+        "operationId": "importCatalogue",
+        "description": "Gestionnaire/admin. Fichier UTF-8 de 1 Mio maximum, enveloppe HTTP JSON de 8 Mio maximum. Lot atomique, 1000 films/5000 exemplaires, reçu 24 h. Erreurs sémantiques et conflits journalisés ; erreurs HTTP de syntaxe/taille non journalisées comme import.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Résultat initial ou reçu rejoué",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSummary"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalogue/export": {
+      "get": {
+        "operationId": "exportCatalogue",
+        "description": "Gestionnaire/admin. Enveloppe JSON même pour le CSV ; données de catalogue seulement. Export journalisé.",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "default": "json"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Catalogue exporté",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueExport"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "security": [
@@ -2846,7 +2964,10 @@
               "reservation.created",
               "reservation.fulfilled",
               "reservation.cancelled",
-              "reservation.expired"
+              "reservation.expired",
+              "import.completed",
+              "import.failed",
+              "export.completed"
             ]
           },
           "entity_type": {
@@ -2855,7 +2976,9 @@
               "copy",
               "collection",
               "loan",
-              "reservation"
+              "reservation",
+              "import",
+              "export"
             ]
           },
           "timestamp": {
@@ -3954,6 +4077,218 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/Stored_id"
             }
+          }
+        }
+      },
+      "CatalogueTransfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format_version",
+          "movies"
+        ],
+        "properties": {
+          "format_version": {
+            "const": 1
+          },
+          "movies": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "title",
+                "year",
+                "director",
+                "actors",
+                "synopsis",
+                "genres",
+                "copies"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/Stored_id"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                "year": {
+                  "type": "integer",
+                  "minimum": 1888,
+                  "maximum": 2100
+                },
+                "director": {
+                  "$ref": "#/components/schemas/Stored_shortText"
+                },
+                "actors": {
+                  "type": "array",
+                  "maxItems": 30,
+                  "items": {
+                    "$ref": "#/components/schemas/Stored_shortText"
+                  }
+                },
+                "synopsis": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "genres": {
+                  "type": "array",
+                  "maxItems": 30,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                  }
+                },
+                "copies": {
+                  "type": "array",
+                  "maxItems": 5000,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "support",
+                      "location",
+                      "condition"
+                    ],
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/Stored_id"
+                      },
+                      "support": {
+                        "enum": [
+                          "numerique",
+                          "dvd",
+                          "blu-ray",
+                          "vhs",
+                          "autre"
+                        ]
+                      },
+                      "location": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "condition": {
+                        "enum": [
+                          "unknown",
+                          "good",
+                          "damaged"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ImportSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation_id",
+          "created_movies",
+          "created_copies",
+          "skipped_movies",
+          "skipped_copies"
+        ],
+        "properties": {
+          "operation_id": {
+            "$ref": "#/components/schemas/Stored_id"
+          },
+          "created_movies": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "created_copies": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          },
+          "skipped_movies": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "skipped_copies": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          }
+        }
+      },
+      "ImportRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "content"
+        ],
+        "properties": {
+          "format": {
+            "enum": [
+              "json",
+              "csv"
+            ]
+          },
+          "content": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/CatalogueTransfer"
+              }
+            ]
+          },
+          "duplicate_policy": {
+            "enum": [
+              "reject",
+              "skip",
+              "append_copies"
+            ],
+            "default": "reject"
+          }
+        }
+      },
+      "CatalogueExport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "content",
+          "filename"
+        ],
+        "properties": {
+          "format": {
+            "enum": [
+              "json",
+              "csv"
+            ]
+          },
+          "content": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/components/schemas/CatalogueTransfer"
+              }
+            ]
+          },
+          "filename": {
+            "enum": [
+              "cinevault-catalogue.json",
+              "cinevault-catalogue.csv"
+            ]
           }
         }
       }

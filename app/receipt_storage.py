@@ -21,7 +21,7 @@ def validate_receipts(document,ids,valid_uuid):
     for record in records:
         if not isinstance(record,dict) or set(record)!={'id','actor_id','key_hash','request_hash','operation','created_at','expires_at','response'}:
             raise ValueError('Invalid receipt fields')
-        if not valid_uuid(record['id']) or record['id'] in ids or record['actor_id'] not in users or record['operation']!='copy.create':
+        if not valid_uuid(record['id']) or record['id'] in ids or record['actor_id'] not in users or record['operation'] not in ('copy.create','catalog.import'):
             raise ValueError('Invalid receipt identity')
         if any(not isinstance(record[k],str) or not HASH.fullmatch(record[k]) for k in ('key_hash','request_hash')):
             raise ValueError('Invalid receipt digest')
@@ -31,6 +31,15 @@ def validate_receipts(document,ids,valid_uuid):
         if key in keys:
             raise ValueError('Duplicate receipt key')
         response=record['response']
+        if record['operation']=='catalog.import':
+            counts=('created_movies','created_copies','skipped_movies','skipped_copies')
+            if not isinstance(response,dict) or set(response)!={'operation_id',*counts} or not valid_uuid(response['operation_id']):
+                raise ValueError('Invalid import receipt response')
+            if any(type(response[k]) is not int or not 0<=response[k]<=(1000 if k.endswith('movies') else 5000) for k in counts):
+                raise ValueError('Invalid import receipt counts')
+            ids.add(record['id'])
+            keys.add(key)
+            continue
         if not isinstance(response,dict) or set(response)!={'id','movie_id','support','location','condition','_etag'}:
             raise ValueError('Invalid cached response')
         if not valid_uuid(response['id']) or not valid_uuid(response['movie_id']) or response['support'] not in SUPPORTS or response['condition'] not in ('unknown','good','damaged'):

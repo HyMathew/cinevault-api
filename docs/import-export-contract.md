@@ -1,33 +1,54 @@
-# Prochain lot : import/export du catalogue
+# Import/export du catalogue
 
-**Conception à implémenter et tester ; aucune route de ce lot n'est encore annoncée comme disponible.** Le stockage et les opérations restent JSON, sans base de données supplémentaire.
+Mode Enterprise. Gestionnaire ou administrateur uniquement ; identité et rôle actuels contrôlés sous le même verrou que l'opération. Le transfert porte exclusivement sur les métadonnées des films et leurs exemplaires partagés. Il exclut comptes, sessions, collections privées, prêts, réservations, audit et reçus. Les sauvegardes d'exploitation du document complet restent confidentielles et distinctes.
 
-## Périmètre et permissions
+## Contrat HTTP
 
-Gestionnaire ou administrateur seulement. Le transfert utilisateur porte sur les films et exemplaires partagés ; jamais comptes, hachages, sessions, collections privées, prêts, réservations ou reçus d'authentification. La sauvegarde du document complet est une opération d'exploitation distincte et confidentielle.
+- `POST /api/v1/catalogue/import` : corps JSON `{format:"json"|"csv",content:objet|texte,duplicate_policy:"reject"|"skip"|"append_copies"}`. `content` doit être un texte pour CSV ; JSON accepte un objet ou un texte JSON strict. `Idempotency-Key` obligatoire, syntaxe 16–128 caractères ASCII alphanumériques, tiret/soulignement.
+- `GET /api/v1/catalogue/export?format=json|csv` : réponse toujours JSON `{format,content,filename}`. Même un CSV circule dans l'enveloppe JSON entre services. Le frontend en fait un téléchargement au type approprié et nom fixe.
+- Succès import : 200 `{operation_id,created_movies,created_copies,skipped_movies,skipped_copies}`. Succès export : 200. Toutes les réponses portent `Cache-Control: no-store`.
+- Erreurs : 401 identité absente/invalide, 403 rôle, 400 syntaxe JSON externe, 413 corps HTTP trop gros, 415 type HTTP, 422 format/contenu/limites, 428 clé manquante, 409 conflit de lot ou de clé, 503 stockage/capacité de reçus. Aucune donnée brute du fichier dans l'erreur.
 
-Un export cohérent est lu sous verrou. L'import valide toutes les lignes et prépare les changements avant de modifier le catalogue, puis vérifie doublons, identifiants et références dans la transaction. Aucun lot partiellement appliqué après une erreur de validation. Les droits sont relus dans la transaction.
+## JSON versionné
 
-## Formats
+`{format_version:1,movies:[...]}` ; chaque film contient `title,year,director,actors,synopsis,copies`, et éventuellement `genres,id`. Chaque copie contient `support,location,condition` et éventuellement `id`. Champs inconnus interdits, y compris les tableaux privés. UTF-8 valide, entiers réels (booléens refusés), limites de champs du catalogue, clés JSON dupliquées et NaN rejetés. `genres` omis devient `[]`.
 
-JSON versionné : `{format_version:1,movies:[...]}`, métadonnées de chaque œuvre et tableau de copies. Le schéma exact et les exemples seront figés avant le code. Les identifiants exportés sont conservables à l'import seulement si valides et sans collision globale. Ne jamais importer les autres tableaux du document interne.
+Le schéma `schemas/catalogue-transfer-v1.schema.json` et son exemple décrivent ce format, distinct du document interne v2. Les identifiants fournis doivent être des UUID canoniques uniques dans le fichier et sans collision globale. Les identifiants exportés peuvent ainsi être préservés dans un nouveau catalogue. Les références et identifiants des autres entités ne sont jamais importés.
 
-CSV : en-tête fixe documenté pour titre, année, réalisateur, acteurs, genres, synopsis, support, emplacement et état. UTF-8, champs cités correctement, tableaux d'acteurs/genres encodés sans ambiguïté. Plusieurs exemplaires d'un film doivent être regroupés de façon déterministe ; une ligne sans exemplaire doit être distinguée d'un exemplaire aux champs incomplets. Fournir un fichier modèle et des tests de citations, accents et lignes multiples. La politique de séparateur devra être explicite, pas un mélange silencieux de formats.
+## CSV
 
-L'export CSV doit neutraliser les cellules pouvant être interprétées comme formules par un tableur ; documenter cette transformation. JSON conserve le texte exact et constitue le format de transfert sans perte. Aucun contenu importé n'est exécuté ni évalué.
+UTF-8 avec ou sans un BOM initial, séparateur **virgule**, guillemet double standard. En-tête exact et dans cet ordre :
 
-## Doublons et limites
+```text
+movie_id,copy_id,title,year,director,actors,genres,synopsis,support,location,condition
+```
 
-Politique explicite `reject` par défaut : un conflit annule le lot entier. Option `skip` : lignes/œuvres déjà présentes ignorées avec compte rendu ; aucun remplacement silencieux des métadonnées ou exemplaires. Distinguer un doublon de film d'un exemplaire supplémentaire légitime. Définir et tester les collisions internes au fichier avant toute écriture.
+Une ligne par exemplaire. Les quatre champs `copy_id,support,location,condition` tous vides représentent un film sans exemplaire. Dès qu'un de ces champs est rempli, tous les attributs de copie sont validés. `movie_id` et `copy_id` sont facultatifs à l'import. `actors` et `genres` sont des tableaux JSON de chaînes dans la cellule, donc cités/échappés selon CSV. Les retours à la ligne et les virgules dans les champs sont pris en charge. Les colonnes supplémentaires, absentes, CSV malformé et métadonnées contradictoires pour un film groupé sont rejetés.
 
-Bornes de taille et de nombre d'œuvres/exemplaires à fixer et vérifier aux deux niveaux web/API. Les routes ordinaires gardent leur limite actuelle ; l'import possède une borne dédiée, pas une levée globale de protection. Encodage invalide, propriétés inconnues, types incorrects, JSON profond, NaN, colonnes manquantes/excédentaires et CSV malformé doivent échouer avec une réponse maîtrisée.
+Les lignes sont regroupées par `movie_id` s'il est renseigné, sinon par titre/année/réalisateur normalisés. JSON est le format sans perte. Le CSV exporté cite toutes les cellules et préfixe par une apostrophe les valeurs commençant par tabulation/CR/LF ou par `=,+,-,@` après espaces initiaux. Cette transformation est conservée lors d'un réimport CSV ; elle n'est pas retirée automatiquement. L'export JSON conserve le texte exact. Aucun contenu importé n'est évalué ou exécuté.
 
-## Répétition et journal
+## Doublons et atomicité
 
-Étendre les reçus avec une opération `catalog.import` et un résultat strict limité à l'identifiant d'opération et aux nombres créés/ignorés. Empreinte canonique liée à l'acteur, mêmes données/même clé → résultat initial ; clé réutilisée avec contenu différent → 409. Ne pas mémoriser le fichier brut ni des données d'authentification. La validation et le reçu appartiennent au même commit.
+Le fichier est intégralement normalisé avant préparation. Les doublons internes de film et d'identifiants sont invalides. Clé naturelle d'un film : titre et réalisateur normalisés, année.
 
-Journal minimal des imports/exports : acteur, type, résultat et identifiant d'opération, sans contenu de fichier ou nom personnel. Prévoir la trace des échecs de lot sans appliquer de changement métier. La forme de l'audit doit correspondre au schéma et aux tests, sans prétendre à une rétention illimitée.
+- `reject` (défaut) : un film déjà présent ou une collision annule tous les ajouts du lot.
+- `skip` : un film déjà présent et tous ses exemplaires entrants sont ignorés ; compteurs explicites. Aucun remplacement.
+- `append_copies` : métadonnées existantes strictement identiques exigées ; seuls les nouveaux exemplaires sont ajoutés. Une copie entrante d'identifiant déjà présent est ignorée seulement si son film et ses attributs sont identiques. Un identifiant absent crée un nouvel exemplaire, même si ses attributs ressemblent à une copie existante.
 
-## Sortie attendue
+Un film à clé naturelle déjà présente est associé au film existant ; un identifiant entrant différent mais non utilisé n'en remplace pas l'identifiant. Tout identifiant entrant déjà utilisé par une autre entité provoque un conflit.
 
-Pages Flask/Jinja d'import et téléchargement JSON/CSV, protection CSRF, rôle et état d'erreur avec instructions utiles. Tests unitaires, contrats REST, fichiers invalides sans mutation, doublons, deux imports concurrents, double soumission et parcours HTTP Compose réel. Les preuves doivent distinguer tests simulés et services réels.
+Une copie complète du document est préparée sous verrou, puis seuls les tableaux films/exemplaires remplacent les anciens après réussite de tout le lot. Erreur de validation/conflit : aucun ajout métier partiel. Le journal d'échec et l'activité de session peuvent néanmoins être persistés. Les droits ne proviennent jamais du formulaire.
+
+## Limites et répétition
+
+Fichier décodé de **1 Mio maximum**, 1 000 films et 5 000 exemplaires par lot. Côté API, l'enveloppe JSON HTTP dispose de 8 Mio pour tenir compte de l'expansion des échappements ; côté web, l'enveloppe multipart est bornée à 2 Mio et le fichier est lu sur 1 Mio + 1 octet. Les routes ordinaires gardent 64 Kio. Un catalogue exporté dépassant ces limites doit être séparé en lots avant réimport ; aucun découpage automatique n'est encore fourni.
+
+Clé d'opération liée à l'acteur, au type d'opération et à l'empreinte du corps canonique avec politique par défaut explicitée. Même contenu/même clé : résultat initial, sans nouvel ajout ni nouvel événement de succès, avec `Idempotency-Replayed: true`. Autre contenu ou autre type d'opération avec la même clé : 409. Garantie bornée à **24 h**, capacité 10 000 reçus. Répéter après expiration est une nouvelle opération ; `append_copies` peut alors créer d'autres copies sans identifiant. Aucun retry automatique. Le reçu conserve seulement identifiant d'opération et compteurs, jamais le fichier brut ni un secret.
+
+Audit minimal : acteur, date, identifiant d'opération, `import.completed`, `import.failed` ou `export.completed`. Rétention bornée aux 2 000 derniers événements. Les échecs sémantiques et conflits métier sont journalisés ; les rejets HTTP de syntaxe/taille/authentification et conflits de clé ne produisent pas un événement d'import distinct. Un export est journalisé dans sa transaction de lecture cohérente.
+
+## Validation
+
+`tests/test_transfer.py` vérifie permissions, rejeu, lot invalide sans ajout partiel, conflits tardifs, collisions avec comptes, politiques, JSON/CSV, accents/virgules/guillemets/retours à la ligne, formules CSV, limites, schémas et refus de secrets dans les reçus. Deux processus indépendants avec la même clé produisent un film, une copie, un reçu et un événement de succès.
+
+La preuve Compose locale distincte vérifie le parcours HTTP multipart → web → API JSON → document et le redémarrage. Les tests web isolés utilisent une API simulée. Le contrôle visuel navigateur des nouveaux écrans et le déploiement distribué restent des validations séparées.

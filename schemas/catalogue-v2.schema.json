@@ -456,7 +456,10 @@
             "reservation.created",
             "reservation.fulfilled",
             "reservation.cancelled",
-            "reservation.expired"
+            "reservation.expired",
+            "import.completed",
+            "import.failed",
+            "export.completed"
           ]
         },
         "entity_type": {
@@ -465,7 +468,9 @@
             "copy",
             "collection",
             "loan",
-            "reservation"
+            "reservation",
+            "import",
+            "export"
           ]
         },
         "timestamp": {
@@ -839,42 +844,122 @@
       }
     },
     "receipt": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "actor_id",
+            "key_hash",
+            "request_hash",
+            "operation",
+            "created_at",
+            "expires_at",
+            "response"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "actor_id": {
+              "$ref": "#/$defs/id"
+            },
+            "key_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "request_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "operation": {
+              "const": "copy.create"
+            },
+            "created_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "response": {
+              "$ref": "#/$defs/cached_copy"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "actor_id",
+            "key_hash",
+            "request_hash",
+            "operation",
+            "created_at",
+            "expires_at",
+            "response"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "actor_id": {
+              "$ref": "#/$defs/id"
+            },
+            "key_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "request_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "operation": {
+              "const": "catalog.import"
+            },
+            "created_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "response": {
+              "$ref": "#/$defs/import_summary"
+            }
+          }
+        }
+      ]
+    },
+    "import_summary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id",
-        "actor_id",
-        "key_hash",
-        "request_hash",
-        "operation",
-        "created_at",
-        "expires_at",
-        "response"
+        "operation_id",
+        "created_movies",
+        "created_copies",
+        "skipped_movies",
+        "skipped_copies"
       ],
       "properties": {
-        "id": {
+        "operation_id": {
           "$ref": "#/$defs/id"
         },
-        "actor_id": {
-          "$ref": "#/$defs/id"
+        "created_movies": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
         },
-        "key_hash": {
-          "$ref": "#/$defs/digest"
+        "created_copies": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
         },
-        "request_hash": {
-          "$ref": "#/$defs/digest"
+        "skipped_movies": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
         },
-        "operation": {
-          "const": "copy.create"
-        },
-        "created_at": {
-          "$ref": "#/$defs/timestamp"
-        },
-        "expires_at": {
-          "$ref": "#/$defs/timestamp"
-        },
-        "response": {
-          "$ref": "#/$defs/cached_copy"
+        "skipped_copies": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
         }
       }
     }

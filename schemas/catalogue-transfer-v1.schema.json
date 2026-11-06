@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cinevault:catalogue-transfer:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "movies"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "movies": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "year",
+          "director",
+          "actors",
+          "synopsis",
+          "genres",
+          "copies"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1888,
+            "maximum": 2100
+          },
+          "director": {
+            "$ref": "#/$defs/shortText"
+          },
+          "actors": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/$defs/shortText"
+            }
+          },
+          "synopsis": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "genres": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "copies": {
+            "type": "array",
+            "maxItems": 5000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "support",
+                "location",
+                "condition"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "support": {
+                  "enum": [
+                    "numerique",
+                    "dvd",
+                    "blu-ray",
+                    "vhs",
+                    "autre"
+                  ]
+                },
+                "location": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "condition": {
+                  "enum": [
+                    "unknown",
+                    "good",
+                    "damaged"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    }
+  }
+}

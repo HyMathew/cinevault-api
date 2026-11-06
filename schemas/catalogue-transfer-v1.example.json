@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "movies": [
+    {
+      "title": "La séance du soir",
+      "year": 2024,
+      "director": "Camille Exemple",
+      "actors": [
+        "Alex Exemple"
+      ],
+      "synopsis": "Exemple fictif libre pour tester le transfert.",
+      "genres": [
+        "Drame"
+      ],
+      "copies": [
+        {
+          "support": "dvd",
+          "location": "Rayon A",
+          "condition": "good"
+        }
+      ]
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 from .validation import SUPPORTS, is_unicode
 
 KINDS = ('owned','favorite','watched','watchlist','custom')
-AUDIT_TYPES = ('movie','copy','collection','loan','reservation')
-AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in ('movie','copy','collection') for action in ('created','updated','deleted')) + tuple('loan.'+action for action in ('requested','approved','returned','cancelled')) + tuple('reservation.'+action for action in ('created','fulfilled','cancelled','expired'))
+AUDIT_TYPES = ('movie','copy','collection','loan','reservation','import','export')
+AUDIT_ACTIONS = tuple(f'{kind}.{action}' for kind in ('movie','copy','collection') for action in ('created','updated','deleted')) + tuple('loan.'+action for action in ('requested','approved','returned','cancelled')) + tuple('reservation.'+action for action in ('created','fulfilled','cancelled','expired')) + ('import.completed','import.failed','export.completed')
 
 
 def valid_collection_attributes(kind, name, supports):

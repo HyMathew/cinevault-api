@@ -10,4 +10,4 @@ La réponse mémorisée est limitée par un validateur strict aux attributs publ
 
 Le formulaire conserve ses valeurs et sa clé lorsqu'une indisponibilité laisse le résultat incertain ; aucun retry automatique. Une tentative modifiant les données avec la même clé exige de vérifier le résultat puis d'ouvrir un nouveau formulaire. Le service reconstruit Location depuis l'identifiant et le routage Flask courant ; aucune URL arbitraire n'est mémorisée.
 
-Ce jalon couvre les créations d'exemplaires. L'extension aux imports et aux autres créations reste à réaliser ; aucun reçu de connexion n'est autorisé.
+L'import `POST /api/v1/catalogue/import` utilise le même mécanisme avec clé obligatoire, opération `catalog.import` et statut 200. Son reçu contient seulement un identifiant d'opération et quatre compteurs bornés ; le contenu du fichier n'est pas conservé dans le reçu. La clé est commune aux opérations d'un acteur : la réutiliser pour un autre type d'opération reçoit 409. Les autres créations ne disposent pas encore de ce mécanisme ; aucun reçu de connexion n'est autorisé.
