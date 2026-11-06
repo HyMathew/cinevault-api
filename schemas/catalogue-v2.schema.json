@@ -459,7 +459,9 @@
             "reservation.expired",
             "import.completed",
             "import.failed",
-            "export.completed"
+            "export.completed",
+            "recovery.completed",
+            "recovery.password_reset"
           ]
         },
         "entity_type": {
@@ -470,7 +472,8 @@
             "loan",
             "reservation",
             "import",
-            "export"
+            "export",
+            "recovery"
           ]
         },
         "timestamp": {
