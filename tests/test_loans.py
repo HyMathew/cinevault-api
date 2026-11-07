@@ -124,3 +124,30 @@ def test_disabled_borrower_cannot_receive_a_pending_loan(enterprise):
     response=client.post('/api/v1/loans/'+loan['id']+'/approve',headers={**manager,'If-Match':loan['_etag']},
                          json={'copy_id':copy['id'],'due_at':int(time.time())+86400})
     assert response.status_code==409
+
+
+def test_open_loan_context_filters_scope_movie_and_status_without_leaking(enterprise):
+    client,path,movie,copy,manager,first,second=setup_lending(enterprise)
+    first_loan=client.post('/api/v1/loans',headers=first,json={'movie_id':movie['id']}).json
+    client.post('/api/v1/loans',headers=second,json={'movie_id':movie['id']})
+    own=client.post('/api/v1/loans',headers=manager,json={'movie_id':movie['id']}).json
+    other_movie=client.post('/api/v1/movies',headers=manager,json={**MOVIE,'title':'Another film'}).json
+    client.post('/api/v1/loans',headers=manager,json={'movie_id':other_movie['id']})
+    query={'scope':'mine','movie_id':movie['id'],'status':'open','limit':1}
+    listing=client.get('/api/v1/loans',headers=manager,query_string=query)
+    assert listing.status_code==200 and listing.json['total']==1
+    assert [item['id'] for item in listing.json['loans']]==[own['id']]
+    assert set(listing.json['borrowers'])=={own['borrower_id']}
+    assert set(listing.json['movies'])=={movie['id']}
+    assert client.get('/api/v1/loans',headers=manager).json['total']==4
+    assert client.get('/api/v1/loans',headers=first,query_string={'scope':'all'}).status_code==403
+    for query_string in ({'scope':'foreign'},{'status':'closed'}, [('scope','mine'),('scope','all')],{'borrower_id':own['borrower_id']}):
+        assert client.get('/api/v1/loans',headers=first,query_string=query_string).status_code==422
+    active=client.post('/api/v1/loans/'+first_loan['id']+'/approve',headers={**manager,'If-Match':first_loan['_etag']},
+        json={'copy_id':copy['id'],'due_at':int(time.time())+86400}).json
+    query={'movie_id':movie['id'],'status':'open'}
+    assert client.get('/api/v1/loans',headers=manager,query_string=query).json['total']==3
+    assert client.get('/api/v1/loans',headers=first,query_string=query).json['loans'][0]['status']=='active'
+    assert client.post('/api/v1/loans/'+active['id']+'/return',headers={**manager,'If-Match':active['_etag']}).status_code==200
+    assert client.get('/api/v1/loans',headers=first,query_string=query).json['total']==0
+    assert client.get('/api/v1/loans',headers=first).json['total']==1

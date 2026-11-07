@@ -54,13 +54,21 @@ def request_loan():
 @bp.get('/loans')
 def list_loans():
     def listing(document,user,session):
-        if set(request.args) - {'status','limit','offset'} or any(len(request.args.getlist(k)) != 1 for k in request.args):
+        if set(request.args) - {'status','limit','offset','scope','movie_id'} or any(len(request.args.getlist(k)) != 1 for k in request.args):
             raise ValidationError({'query':'Paramètres invalides.'})
         status = request.args.get('status','')
-        if status not in ('','pending','active','returned','cancelled'):
+        if status not in ('','open','pending','active','returned','cancelled'):
             raise ValidationError({'status':'Statut invalide.'})
+        scope=request.args.get('scope','all' if user['role'] in MANAGERS else 'mine')
+        if scope not in ('mine','all'):
+            raise ValidationError({'scope':'Périmètre invalide.'})
+        if scope=='all' and user['role'] not in MANAGERS:
+            return forbidden()
+        movie_filter=request.args.get('movie_id','')
         limit,offset = bounded_integer('limit',24,1,100),bounded_integer('offset',0,0,10000)
-        loans = [l for l in document['loans'] if (user['role'] in MANAGERS or l['borrower_id'] == user['id']) and (not status or l['status'] == status)]
+        loans = [l for l in document['loans'] if (scope=='all' or l['borrower_id']==user['id'])
+            and (not status or l['status']==status or status=='open' and l['status'] in ('pending','active'))
+            and (not movie_filter or l['movie_id']==movie_filter)]
         loans.sort(key=lambda l:(l['requested_at'],l['id']),reverse=True)
         page = loans[offset:offset+limit]
         movie_ids = {l['movie_id'] for l in page}

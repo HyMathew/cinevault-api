@@ -48,3 +48,5 @@ Transitions et audit minimal sont écrits dans la même transaction. Étendre le
 4. JSON Schema, exemples et OpenAPI alignés sur les réponses et erreurs réelles.
 5. Écrans membres/gestion, CSRF et versions, puis intégration HTTP Compose réelle et persistance après redémarrage.
 6. Rejouer les suites existantes et documenter exactement l'environnement et les limites. Une conception ou un tableau initialisé ne valide aucune de ces fonctions.
+
+La liste accepte `scope=mine|all`, `movie_id` exact et `status=open` (pending + active), combinables avec la pagination. Le périmètre est appliqué avant les filtres et les jointures. `all` est interdit au membre ; les défauts existants sont conservés. Cela permet à la fiche de retrouver un prêt du compte connecté, y compris gestionnaire, sans charger les prêts des autres membres. Aucun statut stocké supplémentaire.

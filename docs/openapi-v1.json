@@ -1441,9 +1441,11 @@
                 "pending",
                 "active",
                 "returned",
-                "cancelled"
+                "cancelled",
+                "open"
               ]
-            }
+            },
+            "description": "open regroupe pending et active ; aucun changement des statuts persistés."
           },
           {
             "name": "limit",
@@ -1463,6 +1465,26 @@
               "minimum": 0,
               "maximum": 10000,
               "default": 0
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "mine : uniquement ses prêts ; all : gestionnaire/admin uniquement. Par défaut all pour la gestion, mine pour le membre.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mine",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "movie_id",
+            "in": "query",
+            "description": "Filtre exact par film, après application des permissions.",
+            "schema": {
+              "type": "string"
             }
           }
         ]
