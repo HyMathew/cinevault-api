@@ -6,3 +6,7 @@ tests
 *.pyc
 *.json
 *.lock
+
+.venv-quality/
+.ruff_cache/
+reports/

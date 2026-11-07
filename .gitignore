@@ -10,3 +10,7 @@ films.json
 *.pem
 enterprise.json
 /data/
+
+.venv-quality/
+.ruff_cache/
+reports/

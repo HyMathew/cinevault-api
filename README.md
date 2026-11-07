@@ -59,3 +59,9 @@ Une sauvegarde Enterprise contient des hachages de mots de passe et des empreint
 Migration réservée à un opérateur après arrêt complet des anciennes écritures et sauvegarde vérifiée : `report = create_candidate(source_legacy, candidat_absent)` crée à côté un candidat v2, conserve l'identifiant de chaque film, crée un exemplaire au support d'origine avec identifiant déterministe et n'altère pas la source. Inspecter/valider les nombres et les empreintes avant `promote_candidate(candidat, cible_absente, source=source_legacy, expected_source_sha256=report['source_sha256'], expected_candidate_sha256=report['candidate_sha256'])`. La promotion prend les verrous source puis cible, vérifie les deux empreintes et ne remplace jamais une cible existante. L'ancien service doit rester arrêté pendant et après le basculement : le verrou ne l'empêche pas de réécrire le legacy après la promotion. Ne jamais lancer la migration sur un catalogue réel sans sauvegarde et plan de retour testés.
 
 Les créations sans écrasement exigent la prise en charge des liens physiques sur le système de fichiers de destination ; toute erreur est remontée, sans repli qui écraserait une cible. Une erreur après remplacement/lien réussi mais avant synchronisation du répertoire rend le résultat de l'opération ambigu : inspecter le fichier et son empreinte avant toute nouvelle tentative. Après une panne brutale, les fichiers temporaires laissés par le système nécessitent une inspection manuelle avant suppression ; aucune suppression automatique de données préexistantes.
+
+## Qualité et CI
+
+Voir les [commandes, contrôles et limites](docs/quality.md). Les configurations de CI ne constituent pas une preuve d’exécution distante ; aucun badge de succès n’est ajouté avant un résultat GitHub réel.
+
+Le [socle d’exécution spécialisé et ses limites de reconstruction](docs/runtime.md) décrit les deux étapes de construction et les composants conservés.

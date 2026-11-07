@@ -3,7 +3,7 @@
   "info": {
     "title": "CineVault Enterprise API",
     "version": "1.0.0",
-    "description": "Contrat du jalon comptes ; le mode Enterprise doit être explicitement activé."
+    "description": "Contrat Enterprise : comptes, catalogue, exemplaires, collections privées, prêts, réservations, transfert, statistiques, recommandations et métadonnées opt-in. Le mode Enterprise doit être explicitement activé."
   },
   "paths": {
     "/api/v1/auth/register": {
