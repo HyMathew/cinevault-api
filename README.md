@@ -66,3 +66,7 @@ Les créations sans écrasement exigent la prise en charge des liens physiques s
 Voir les [commandes, contrôles et limites](docs/quality.md). Les configurations de CI ne constituent pas une preuve d’exécution distante ; aucun badge de succès n’est ajouté avant un résultat GitHub réel.
 
 Le [socle d’exécution spécialisé et ses limites de reconstruction](docs/runtime.md) décrit les deux étapes de construction et les composants conservés.
+
+## Licence et intégration
+
+Le code original et sa documentation sont sous [licence MIT](LICENSE). Les dépendances tierces et les médias référencés conservent leurs propres licences ; aucune affiche externe n'est embarquée dans ce dépôt. Le déploiement complet avec le frontend utilise les configurations du projet d'infrastructure CineVault. Les anciens journaux privés de développement ne sont pas une preuve publique ; les résultats CI doivent être rattachés à leur révision exacte.
