@@ -73,6 +73,13 @@ def command(args, *, log=None, env=None, timeout=600):
     return result.stdout
 
 
+def export_image_archive(identity, archive):
+    command(["docker", "image", "save", "--output", str(archive), identity])
+    # Linux bind mounts preserve the host mode. The parent stays private;
+    # only this exported file is readable by the unprivileged scanner.
+    archive.chmod(0o444)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="Local application image tag to build")
@@ -238,7 +245,7 @@ def main():
         # The scanner receives only this archive. No daemon socket or host credentials.
         with tempfile.TemporaryDirectory(prefix="cinevault-image-") as directory:
             archive = Path(directory) / "image.tar"
-            command(["docker", "image", "save", "--output", str(archive), receipt["image_id"]])
+            export_image_archive(receipt["image_id"], archive)
             scan = subprocess.run(
                 [
                     "docker",
