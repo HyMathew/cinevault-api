@@ -1,6 +1,7 @@
 """Audit each pinned dependency set; preserve failures and never ignore advisories."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,7 @@ def main():
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
                 timeout=600,
             )
             output.write_text(result.stdout, encoding="utf-8")
