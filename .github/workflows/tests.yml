@@ -73,6 +73,10 @@ jobs:
           retention-days: 7
           if-no-files-found: error
   image:
+    if: ${{ !((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+    needs: [quality, tests]
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -84,6 +88,38 @@ jobs:
           python-version: '3.13'
       - name: Build, non-root health and image scan
         run: python scripts/check_image.py --image cinevault-api:ci-${{ github.sha }}
+      - name: Keep image audit reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-audit
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
+  publish-image:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    needs: [quality, tests]
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Build, non-root health and image scan
+        run: python scripts/check_image.py --image cinevault-api:ci-${{ github.sha }}
+      - name: Publish the exact gated default-branch image
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/publish_image.py
       - name: Keep image audit reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
