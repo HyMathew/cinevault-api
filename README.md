@@ -7,6 +7,7 @@ API Flask du tiers données de CineVault. Deux modes explicites : le catalogue p
 Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 déjà initialisé ou migré, et `AUTH_THROTTLE_KEY_FILE` vers un fichier privé d'au moins 32 octets. Aucun fichier manquant n'est recréé silencieusement. Le premier administrateur se crée par l'outil local interactif `python -m app.bootstrap --store <chemin>` ; aucun compte ou secret prédéfini. Les mutations des routes legacy sont refusées dans ce mode ; les lectures legacy conservent leur fichier pédagogique distinct.
 
 - [Comptes et sessions](docs/auth-contract.md), [protections et limites](docs/accounts-milestone.md).
+- [Admission des opérations anonymes et contexte client signé](docs/auth-admission.md).
 - [Catalogue et exemplaires versionnés](docs/catalogue-v1-contract.md).
 - [Collections privées et audit minimal](docs/collections-contract.md).
 - [Prêts et réservations](docs/lending-contract.md), [file et expiration](docs/reservations.md).

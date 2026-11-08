@@ -11,10 +11,12 @@ from pathlib import Path
 import portalocker
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.exceptions import BadRequest, ServiceUnavailable, UnsupportedMediaType
 
 from .auth_storage import USERNAME
+from .client_context import InvalidClientContext, client_address, install_client_context
+from .registration_admission import RegistrationAdmission, RegistrationBusy
 from .repository import unique_pairs
 from .storage_v2 import V2Store
 from .validation import ValidationError, is_unicode
@@ -180,6 +182,26 @@ def no_cache(response):
     return response
 
 
+@bp.before_request
+def authenticate_client_context():
+    if request.method == "POST" and request.endpoint in (
+        "enterprise_auth.register",
+        "enterprise_auth.login",
+    ):
+        try:
+            g.auth_client_address = client_address(current_app, now())
+        except InvalidClientContext:
+            return unauthorized()
+
+
+def registration_problem(document, username):
+    if any(user["username"] == username for user in document["users"]):
+        return error(409, "conflict", "Identifiant indisponible.")
+    if len(document["users"]) >= 10000:
+        return error(503, "registration_capacity", "Inscription temporairement indisponible.")
+    return None
+
+
 @bp.post("/auth/register")
 def register():
     data = payload(("username", "display_name", "password"))
@@ -190,17 +212,33 @@ def register():
         or not valid_password(data["password"])
     ):
         raise ValidationError({"body": "Identifiant, nom ou mot de passe invalide."})
-    user = make_user(username, data["display_name"], data["password"], "member", now())
+    problem = registration_problem(check_store(), username)
+    if problem:
+        return problem
+    try:
+        user = current_app.extensions["registration_admission"].compute(
+            limit_key("register-ip:", g.auth_client_address),
+            now(),
+            lambda: make_user(username, data["display_name"], data["password"], "member", now()),
+        )
+    except RegistrationBusy as exc:
+        response, status = error(429, "rate_limited", "Trop de tentatives d’inscription.")
+        response.headers["Retry-After"] = str(exc.retry_after)
+        return response, status
+    except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
+        current_app.logger.error("Admission indisponible : %s", type(exc).__name__)
+        raise ServiceUnavailable("Inscription temporairement indisponible.") from exc
 
     def add(doc):
-        if any(u["username"] == username for u in doc["users"]):
-            return None
+        problem = registration_problem(doc, username)
+        if problem:
+            return problem
         doc["users"].append(user)
         return public_profile(user)
 
     profile = transact(add)
-    if profile is None:
-        return error(409, "conflict", "Identifiant indisponible.")
+    if not isinstance(profile, dict):
+        return profile
     return jsonify(profile), 201
 
 
@@ -222,7 +260,7 @@ def login():
     )
     username = supplied_user or "<invalid>"
     timestamp = now()
-    keys = [limit_key("user:", username), limit_key("ip:", request.remote_addr or "unknown")]
+    keys = [limit_key("user:", username), limit_key("ip:", g.auth_client_address)]
     dummy = current_app.extensions["auth_dummy_hash"]
 
     def attempt(doc):
@@ -420,6 +458,16 @@ def install_enterprise(app):
     app.extensions["enterprise_store"] = store
     app.extensions["auth_throttle_key"] = key
     app.extensions["auth_dummy_hash"] = hasher.hash(secrets.token_urlsafe(32))
+    install_client_context(app)
+    admission = RegistrationAdmission(path)
+    reserved = {
+        Path(str(value) + suffix).resolve()
+        for value in (path, app.config["DATA_FILE"])
+        for suffix in ("", ".lock")
+    }
+    if any(Path(value).resolve() in reserved for value in (admission.path, admission.lock_path)):
+        raise RuntimeError("Registration admission must be separate from business files and locks")
+    app.extensions["registration_admission"] = admission
     app.register_blueprint(bp)
     from .enterprise_catalogue import bp as catalogue_bp
 

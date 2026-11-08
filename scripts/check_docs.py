@@ -72,6 +72,12 @@ def contract_errors(root):
     errors = []
     examples = [
         (
+            "registration-admission.example.json",
+            json.loads(
+                (root / "schemas/registration-admission.schema.json").read_text(encoding="utf-8")
+            ),
+        ),
+        (
             "catalogue-v2.example.json",
             json.loads((root / "schemas/catalogue-v2.schema.json").read_text(encoding="utf-8")),
         ),

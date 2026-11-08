@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cinevault:registration-admission:1",
+  "description": "État technique dérivé. Le code vérifie aussi la somme des sources et l'horloge ; aucune identité en clair.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "window_start", "total", "sources"],
+  "properties": {
+    "version": {"const": 1},
+    "window_start": {"type": "integer", "minimum": 0},
+    "total": {"type": "integer", "minimum": 0, "maximum": 60},
+    "sources": {
+      "type": "object",
+      "maxProperties": 60,
+      "propertyNames": {"pattern": "^[0-9a-f]{64}$"},
+      "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 20}
+    }
+  }
+}

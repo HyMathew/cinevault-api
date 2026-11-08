@@ -1,5 +1,7 @@
 # Jalon comptes Enterprise
 
+Ce document conserve l'état historique du premier jalon du 6 novembre. Le code a depuis ajouté les fonctions collaboratives et la reprise. Pour les protections actuelles d'inscription et de connexion, consulter [l'admission et le contexte client](auth-admission.md) ; les limites décrites ci-dessous expliquent le point de départ de la correction du 8 novembre.
+
 Ce jalon ajoute une API de comptes opt-in, sans activer les fonctions collaboratives encore absentes. Le mode pédagogique legacy reste disponible par défaut ; en mode Enterprise ses mutations anonymes sont refusées. Les routes de comptes sont détaillées dans `auth-contract.md` et `openapi-v1.json`.
 
 ## Initialisation explicite

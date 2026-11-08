@@ -143,6 +143,8 @@ def install_metadata(app):
             for value in (app.config["ENTERPRISE_DATA_FILE"], app.config["DATA_FILE"])
             for suffix in ("", ".lock")
         }
+        admission = app.extensions["registration_admission"]
+        reserved.update(Path(value).resolve() for value in (admission.path, admission.lock_path))
         if any(Path(str(path) + suffix).resolve() in reserved for suffix in ("", ".lock")):
             raise RuntimeError("Metadata cache must be separate from business files and locks")
         agent = app.config.get("WIKIMEDIA_USER_AGENT") or os.environ.get("WIKIMEDIA_USER_AGENT")

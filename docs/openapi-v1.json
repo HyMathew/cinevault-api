@@ -10,6 +10,12 @@
       "post": {
         "operationId": "register",
         "security": [],
+        "description": "Inscription avec admission avant Argon2. Contexte client signé obligatoire si CLIENT_CONTEXT_REQUIRED=true ; voir docs/auth-admission.md.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ClientAddress"},
+          {"$ref": "#/components/parameters/ClientTime"},
+          {"$ref": "#/components/parameters/ClientSignature"}
+        ],
         "requestBody": {
           "$ref": "#/components/requestBodies/Register"
         },
@@ -17,10 +23,25 @@
           "201": {
             "$ref": "#/components/responses/Profile"
           },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
           "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "description": "Budget d'inscription épuisé ou calcul déjà en cours",
+            "headers": {
+              "Retry-After": {"schema": {"type": "integer", "minimum": 1, "maximum": 60}}
+            },
+            "content": {
+              "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
+            }
+          },
+          "503": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -30,6 +51,12 @@
       "post": {
         "operationId": "login",
         "security": [],
+        "description": "Compte et source vérifiée limités séparément. Contexte signé obligatoire si CLIENT_CONTEXT_REQUIRED=true ; voir docs/auth-admission.md.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ClientAddress"},
+          {"$ref": "#/components/parameters/ClientTime"},
+          {"$ref": "#/components/parameters/ClientSignature"}
+        ],
         "requestBody": {
           "$ref": "#/components/requestBodies/Login"
         },
@@ -2567,6 +2594,29 @@
     }
   ],
   "components": {
+    "parameters": {
+      "ClientAddress": {
+        "name": "X-CineVault-Client-IP",
+        "in": "header",
+        "required": false,
+        "description": "Adresse canonique observée et signée par le service web de confiance ; requise avec les deux autres en-têtes en mode contexte obligatoire. Un header navigateur libre ne suffit jamais.",
+        "schema": {"type": "string", "maxLength": 45}
+      },
+      "ClientTime": {
+        "name": "X-CineVault-Client-Time",
+        "in": "header",
+        "required": false,
+        "description": "Seconde Unix canonique signée, écart absolu de 30 secondes maximum.",
+        "schema": {"type": "string", "pattern": "^[0-9]{1,10}$"}
+      },
+      "ClientSignature": {
+        "name": "X-CineVault-Client-Signature",
+        "in": "header",
+        "required": false,
+        "description": "HMAC-SHA256 de la version, date, adresse, méthode, chemin et empreinte du corps exact. Ce contexte ne remplace pas le secret de connexion.",
+        "schema": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
