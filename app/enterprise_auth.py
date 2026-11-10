@@ -247,6 +247,33 @@ def limit_key(prefix, value):
     return hmac.new(key, (prefix + value).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def attempt_budget(document, keys, timestamp):
+    # Keep future windows on clock rollback; another authentication route must not reset them.
+    document["auth_attempts"][:] = [
+        attempt
+        for attempt in document["auth_attempts"]
+        if timestamp - attempt["window_start"] < WINDOW
+    ]
+    existing = {attempt["key"]: attempt for attempt in document["auth_attempts"]}
+    if any(existing.get(key, {}).get("count", 0) >= MAX_ATTEMPTS for key in keys):
+        response, status = error(429, "rate_limited", "Trop de tentatives.")
+        response.headers["Retry-After"] = str(WINDOW)
+        return existing, (response, status)
+    if len(existing) + len(set(keys) - existing.keys()) > 10000:
+        return existing, error(
+            503, "auth_attempt_capacity", "Capacité de vérification temporairement atteinte."
+        )
+    return existing, None
+
+
+def record_failed_attempts(document, existing, keys, timestamp):
+    for key in keys:
+        if key in existing:
+            existing[key]["count"] += 1
+        else:
+            document["auth_attempts"].append({"key": key, "window_start": timestamp, "count": 1})
+
+
 @bp.post("/auth/login")
 def login():
     data = payload(("username", "password"))
@@ -264,25 +291,16 @@ def login():
     dummy = current_app.extensions["auth_dummy_hash"]
 
     def attempt(doc):
-        doc["auth_attempts"][:] = [
-            a
-            for a in doc["auth_attempts"]
-            if timestamp - a["window_start"] < WINDOW and timestamp >= a["window_start"]
-        ]
-        existing = {a["key"]: a for a in doc["auth_attempts"]}
-        if any(existing.get(k, {}).get("count", 0) >= MAX_ATTEMPTS for k in keys):
-            return "limited", None
+        existing, problem = attempt_budget(doc, keys, timestamp)
+        if problem:
+            return "rejected", problem
         user = next((u for u in doc["users"] if u["username"] == username), None)
         try:
             ok = hasher.verify(user["password_hash"] if user else dummy, supplied_password)
         except (VerificationError, InvalidHashError):
             ok = False
         if not ok or not user or not user["enabled"]:
-            for key in keys:
-                if key in existing:
-                    existing[key]["count"] += 1
-                else:
-                    doc["auth_attempts"].append({"key": key, "window_start": timestamp, "count": 1})
+            record_failed_attempts(doc, existing, keys, timestamp)
             return "invalid", None
         token = secrets.token_urlsafe(32)
         doc["sessions"][:] = [
@@ -302,14 +320,12 @@ def login():
         )
         return "ok", token
 
-    outcome, token = transact(attempt)
-    if outcome == "limited":
-        response, status = error(429, "rate_limited", "Trop de tentatives.")
-        response.headers["Retry-After"] = str(WINDOW)
-        return response, status
+    outcome, value = transact(attempt)
+    if outcome == "rejected":
+        return value
     if outcome != "ok":
         return unauthorized()
-    return {"token": token, "token_type": "Bearer", "expires_in": SESSION_TTL}
+    return {"token": value, "token_type": "Bearer", "expires_in": SESSION_TTL}
 
 
 @bp.get("/me")
@@ -340,9 +356,15 @@ def change_password():
         return unauthorized()
 
     def change(doc, user, session):
+        timestamp = now()
+        keys = [limit_key("reauth:user:", user["id"])]
+        existing, problem = attempt_budget(doc, keys, timestamp)
+        if problem:
+            return problem
         try:
             hasher.verify(user["password_hash"], current)
         except (VerificationError, InvalidHashError):
+            record_failed_attempts(doc, existing, keys, timestamp)
             return unauthorized()
         user["password_hash"] = hasher.hash(data["new_password"])
         doc["sessions"][:] = [s for s in doc["sessions"] if s["user_id"] != user["id"]]

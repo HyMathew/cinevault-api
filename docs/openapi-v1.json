@@ -90,6 +90,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -140,6 +143,7 @@
     "/api/v1/me/password": {
       "put": {
         "operationId": "changePassword",
+        "description": "Cinq échecs de réauthentification au plus par compte sur 900 secondes, partagés entre sessions et adresses. Blocage avant vérification et révocation de toutes les sessions après réussite.",
         "requestBody": {
           "$ref": "#/components/requestBodies/PasswordChange"
         },
@@ -151,6 +155,22 @@
             "$ref": "#/components/responses/Error"
           },
           "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "description": "Budget de réauthentification du compte épuisé",
+            "headers": {
+              "Retry-After": {
+                "schema": {"type": "integer", "minimum": 1}
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Error"}
+              }
+            }
+          },
+          "503": {
             "$ref": "#/components/responses/Error"
           }
         }
