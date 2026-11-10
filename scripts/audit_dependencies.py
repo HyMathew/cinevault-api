@@ -11,7 +11,12 @@ def main():
     root = Path(__file__).resolve().parents[1]
     reports = root / "reports"
     reports.mkdir(exist_ok=True)
-    filenames = ("requirements.txt", "requirements-dev.txt", "requirements-quality.txt")
+    filenames = (
+        "requirements.txt",
+        "requirements-dev.txt",
+        "requirements-quality.txt",
+        "requirements-mongodb.txt",
+    )
     results = [
         {"requirements": name, "exit_code": -1, "error": "Not executed"} for name in filenames
     ]

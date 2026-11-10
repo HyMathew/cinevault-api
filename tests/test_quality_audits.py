@@ -47,7 +47,8 @@ def test_timeout_invalidates_previous_success_and_records_each_attempt(monkeypat
         audit_dependencies.main()
     assert exc.value.code == 1
     summary = json.loads((reports / "dependency-summary.json").read_text())
-    assert len(summary) == 3
+    assert len(summary) == 4
+    assert summary[-1]["requirements"] == "requirements-mongodb.txt"
     assert all(item["exit_code"] != 0 and item.get("error") for item in summary)
 
 
