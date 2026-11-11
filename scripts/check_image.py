@@ -20,6 +20,32 @@ CACHE_HELPER = (
     "python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc"
 )
 
+MONGODB_RUNTIME_PROBE = """
+import json, os
+from importlib import metadata
+from pathlib import Path
+import bson, pymongo
+from bson.int64 import Int64
+from app.persistence.mongo_model import collection_schemas, collection_indexes
+assert os.getuid() == 10001
+assert pymongo.version == '4.19.0'
+assert metadata.version('dnspython') == '2.9.2'
+assert not bson.has_c() and not pymongo.has_c()
+decoded = bson.decode(bson.encode({'integer': Int64(2**53 + 1), 'flag': True, 'text': 'Échos'}))
+assert type(decoded['integer']) is Int64 and decoded['integer'] == 2**53 + 1
+assert type(decoded['flag']) is bool and decoded['text'] == 'Échos'
+assert len(collection_schemas()) == 10
+assert sum(map(len, collection_indexes().values())) == 22
+installed = {d.metadata['Name'].lower().replace('_', '-') for d in metadata.distributions()}
+assert not installed.intersection({'hatchling', 'hatch-requirements-txt', 'setuptools',
+    'tomlkit', 'pathspec', 'pluggy', 'trove-classifiers'})
+assert all((Path('/usr/share/licenses/cinevault-mongodb') / name).is_file()
+    for name in ('pymongo-LICENSE', 'pymongo-THIRD-PARTY-NOTICES', 'dnspython-LICENSE'))
+print(json.dumps({'pymongo': pymongo.version, 'dnspython': metadata.version('dnspython'),
+    'c_extensions': False, 'bson_int64_exact': True, 'schemas': 10, 'indexes': 22,
+    'build_tools_absent': True, 'notices_present': True}))
+"""
+
 
 def cleanup_volume(name, attempt):
     item = {"volume": name, "success": False}
@@ -182,6 +208,9 @@ def main():
         )
         if receipt["runtime_uid"] == 0:
             raise RuntimeError("Application process must not run as root")
+        receipt["mongodb_runtime"] = json.loads(
+            command(["docker", "exec", container, "python", "-c", MONGODB_RUNTIME_PROBE])
+        )
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             health = json.loads(

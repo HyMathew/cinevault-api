@@ -10,3 +10,7 @@ tests
 .venv-quality/
 .ruff_cache/
 reports/
+
+# MongoDB validation uses the versioned entity schema at runtime.
+!schemas/
+!schemas/*.json
