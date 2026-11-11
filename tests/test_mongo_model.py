@@ -157,6 +157,39 @@ def test_unicode_lists_and_metadata_large_seconds_survive_the_wire():
     assert type(persisted["external_source"]["retrieved_at"]) is Int64
 
 
+def test_movie_search_keys_are_canonical_reserved_hidden_and_checked_on_decode():
+    boundary = model()
+    value = {
+        "id": MOVIE_ID,
+        "title": "Straße",
+        "year": 2026,
+        "director": "Σς",
+        "actors": ["Fin", "Début"],
+        "genres": ["ΐ" * 80],
+        "synopsis": "",
+    }
+    persisted = boundary.encode_record("movies", value)
+    assert persisted["title_key"] == "strasse"
+    assert persisted["director_key"] == "σσ"
+    assert persisted["search_key"] == "strasse σσ fin début"
+    assert len(persisted["genre_keys"][0]) == 240
+    assert boundary.decode_record("movies", persisted) == value
+    for key in ("title_key", "director_key", "search_key", "genre_keys"):
+        with pytest.raises(ValueError):
+            boundary.encode_record("movies", {**value, key: persisted[key]})
+        bad = {**persisted, key: "wrong"}
+        with pytest.raises(ValueError):
+            boundary.decode_record("movies", bad)
+        absent = {k: v for k, v in persisted.items() if k != key}
+        with pytest.raises(ValueError):
+            boundary.decode_record("movies", absent)
+    schema = boundary.collection_schemas()["movies"]
+    assert set(("title_key", "director_key", "search_key", "genre_keys")).issubset(
+        schema["required"]
+    )
+    assert schema["properties"]["genre_keys"]["items"]["maxLength"] >= 240
+
+
 def test_native_schemas_cover_every_entity_and_rename_only_root_identity():
     boundary = model()
     schemas = boundary.collection_schemas()

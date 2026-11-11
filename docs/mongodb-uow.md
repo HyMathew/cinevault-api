@@ -93,7 +93,7 @@ refusées sans perte de précision, comme documenté dans le [modèle](mongodb-m
 
 `mongo_maintenance.provision(database)` est réservé à une identité de maintenance,
 sur une base candidate neuve ou déjà provisionnée. Il installe les dix schémas
-natifs et 22 index nommés du modèle, plus les deux schémas stricts de coordination
+natifs et 25 index nommés du modèle actuel, plus les deux schémas stricts de coordination
 et du registre ; les index `_id` automatiques sont supplémentaires. La révision
 initiale est zéro uniquement quand le document de coordination n'existe pas.
 

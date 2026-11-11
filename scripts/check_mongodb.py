@@ -208,6 +208,36 @@ def denied(action):
 def application_contract(client, address, password, attempt):
     """Maintenance provisions; the application receives only collection CRUD."""
     from pymongo import MongoClient
+    from pymongo.monitoring import CommandListener
+
+    class PublicReadTrace(CommandListener):
+        def __init__(self):
+            self.operations = []
+
+        def started(self, event):
+            if event.command_name in (
+                "find",
+                "aggregate",
+                "insert",
+                "update",
+                "delete",
+                "findAndModify",
+            ):
+                self.operations.append((event.command_name, event.command.get(event.command_name)))
+            if event.command_name == "aggregate":
+                for stage in event.command.get("pipeline", []):
+                    if "$out" in stage or "$merge" in stage:
+                        self.operations.append(("aggregate-write", "forbidden"))
+                    if "$lookup" in stage:
+                        self.operations.append(("aggregate", stage["$lookup"].get("from")))
+
+        def succeeded(self, event):
+            pass
+
+        def failed(self, event):
+            pass
+
+    trace = PublicReadTrace()
 
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
@@ -245,20 +275,31 @@ def application_contract(client, address, password, attempt):
         "socketTimeoutMS": 10000,
     }
     with MongoClient(
-        address, username="application", password=password, authSource=name, **options
+        address,
+        username="application",
+        password=password,
+        authSource=name,
+        event_listeners=[trace],
+        **options,
     ) as app:
         result = contract.exercise_backend(app[name], maintenance_database=database)
         for filename, function, key in (
             ("test_authentication_service.py", "exercise_auth_service", "authentication_service"),
             ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
             ("test_copy_service.py", "exercise_copy_service", "copy_service"),
+            (
+                "test_public_catalogue_service.py",
+                "exercise_public_catalogue_service",
+                "public_catalogue_service",
+            ),
         ):
             service_spec = importlib.util.spec_from_file_location(
                 "cinevault_native_" + key, root / "tests" / filename
             )
             service_contract = importlib.util.module_from_spec(service_spec)
             service_spec.loader.exec_module(service_contract)
-            result[key] = getattr(service_contract, function)(app[name])
+            arguments = {"observer": trace.operations} if key == "public_catalogue_service" else {}
+            result[key] = getattr(service_contract, function)(app[name], **arguments)
         denied(lambda: app[name].users.create_index("display_name"))
         denied(lambda: app[name].command("createUser", "forbidden", pwd="unused", roles=[]))
         denied(lambda: app["other_database"].users.find_one({}))

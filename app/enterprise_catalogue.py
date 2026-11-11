@@ -4,7 +4,6 @@ from flask import Blueprint, current_app, jsonify, request, url_for
 
 from .enterprise_auth import (
     bearer,
-    check_store,
     error,
     forbidden,
     no_cache,
@@ -14,8 +13,10 @@ from .enterprise_auth import (
     run_service,
 )
 from .services.catalogue import CatalogueService
-from .services.catalogue_model import COPY_FIELDS, SUPPORTS, copy_data, etag, movie_data, resource
+from .services.catalogue_model import COPY_FIELDS, copy_data, etag, movie_data, resource
+from .services.catalogue_model import SUPPORTS as SUPPORTS
 from .services.copies import CopyService
+from .services.public_catalogue import PublicCatalogueService
 from .validation import ValidationError
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
@@ -68,6 +69,10 @@ def copy_service():
     return CopyService(current_app.extensions["enterprise_persistence"])
 
 
+def public_catalogue_service():
+    return PublicCatalogueService(current_app.extensions["enterprise_persistence"])
+
+
 def prepare_movie(optional, movie_id=None):
     gate = run_service(
         lambda: catalogue_service().authorize(
@@ -110,59 +115,14 @@ def bounded_integer(name, default, lower, upper):
 
 @bp.get("/movies")
 def list_movies():
-    allowed = {"q", "genre", "year", "support", "sort", "limit", "offset"}
-    if set(request.args) - allowed or any(len(request.args.getlist(k)) != 1 for k in request.args):
-        raise ValidationError({"query": "Paramètres invalides."})
-    limit, offset = bounded_integer("limit", 24, 1, 100), bounded_integer("offset", 0, 0, 10000)
-    year = bounded_integer("year", 1888, 1888, 2100) if "year" in request.args else None
-    query, genre = (
-        request.args.get("q", "").strip().casefold(),
-        request.args.get("genre", "").strip().casefold(),
+    return run_service(
+        lambda: public_catalogue_service().movies(list(request.args.items(multi=True)))
     )
-    support, sort = request.args.get("support", ""), request.args.get("sort", "title")
-    if (
-        len(query) > 200
-        or len(genre) > 80
-        or support not in ("", *SUPPORTS)
-        or sort not in ("title", "-title", "year", "-year")
-    ):
-        raise ValidationError({"query": "Filtre ou tri invalide."})
-    document = check_store()
-    support_ids = {c["movie_id"] for c in document["copies"] if c["support"] == support}
-    movies = [
-        m
-        for m in document["movies"]
-        if (not query or query in " ".join([m["title"], m["director"], *m["actors"]]).casefold())
-        and (not genre or genre in [g.casefold() for g in m["genres"]])
-        and (year is None or m["year"] == year)
-        and (not support or m["id"] in support_ids)
-    ]
-    field = sort.lstrip("-")
-    movies.sort(
-        key=lambda m: (m[field].casefold() if field == "title" else m[field], m["id"]),
-        reverse=sort.startswith("-"),
-    )
-    page = movies[offset : offset + limit]
-    summaries = {m["id"]: {"count": 0, "supports": []} for m in page}
-    for copy in document["copies"]:
-        if copy["movie_id"] in summaries:
-            summary = summaries[copy["movie_id"]]
-            summary["count"] += 1
-            if copy["support"] not in summary["supports"]:
-                summary["supports"].append(copy["support"])
-    return {
-        "movies": [resource(m) for m in page],
-        "total": len(movies),
-        "limit": limit,
-        "offset": offset,
-        "copy_summaries": summaries,
-    }
 
 
 @bp.get("/movies/<movie_id>")
 def get_movie(movie_id):
-    movie = lookup(check_store(), "movies", movie_id)
-    return missing() if movie is None else respond(movie)
+    return run_service(lambda: public_catalogue_service().movie(movie_id))
 
 
 @bp.post("/movies")
@@ -209,22 +169,14 @@ def delete_movie(movie_id):
 
 @bp.get("/copies")
 def list_copies():
-    if set(request.args) - {"movie_id"} or len(request.args.getlist("movie_id")) > 1:
-        raise ValidationError({"query": "Paramètres invalides."})
-    movie_id = request.args.get("movie_id")
-    return {
-        "copies": [
-            resource(c)
-            for c in check_store()["copies"]
-            if movie_id is None or c["movie_id"] == movie_id
-        ]
-    }
+    return run_service(
+        lambda: public_catalogue_service().copies(list(request.args.items(multi=True)))
+    )
 
 
 @bp.get("/copies/<copy_id>")
 def get_copy(copy_id):
-    copy = lookup(check_store(), "copies", copy_id)
-    return missing() if copy is None else respond(copy)
+    return run_service(lambda: public_catalogue_service().copy(copy_id))
 
 
 @bp.post("/copies")

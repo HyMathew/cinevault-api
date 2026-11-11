@@ -4,6 +4,12 @@
 académique reste la référence des formes publiques ; les références et transitions
 restent des règles métier, qui ne peuvent pas être remplacées par `$jsonSchema`.
 
+Le [lot de lectures publiques C2c](public-catalogue-service.md) ajoute les clés
+techniques de recherche/tri des films et trois index non uniques (25 au total).
+Le nouveau validateur impose ces clés ; une ancienne base Mongo nécessite une
+migration explicite. `provision` refuse sa divergence sans collMod ou réparation.
+Les preuves datées ci-dessous portant sur22index restent celles de l’ancien lot.
+
 ## Représentation
 
 Un document MongoDB correspond à une entité. Son `_id` est l'UUID canonique public,

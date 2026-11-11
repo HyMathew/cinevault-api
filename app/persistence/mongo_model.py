@@ -12,6 +12,7 @@ from pathlib import Path
 
 from bson import Int64
 
+from ..catalogue_query import MOVIE_KEYS, movie_keys
 from ..storage_v2 import COLLECTIONS
 
 INT64_MIN = -(2**63)
@@ -98,7 +99,7 @@ def encode_record(name, record):
     identity = _identity_field(name)
     if type(record) is not dict or identity not in record:
         raise ValueError("Missing persistence identity")
-    if "_id" in record or "list_name_key" in record:
+    if {"_id", "list_name_key", *MOVIE_KEYS}.intersection(record):
         raise ValueError("Reserved persistence field")
     _validate_identity(name, record[identity])
     result = _convert(record, encode=True)
@@ -107,6 +108,8 @@ def encode_record(name, record):
         if type(result.get("list_name")) is not str:
             raise ValueError("Invalid collection name")
         result["list_name_key"] = result["list_name"].casefold()
+    elif name == "movies":
+        result.update(movie_keys(record))
     return result
 
 
@@ -118,6 +121,14 @@ def decode_record(name, record):
     _validate_identity(name, record["_id"])
     result = _convert(record, encode=False)
     result[identity] = result.pop("_id")
+    if name == "movies":
+        expected = movie_keys(result)
+        if any(key not in result or result[key] != value for key, value in expected.items()):
+            raise ValueError("Invalid stored movie search key")
+        for key in expected:
+            result.pop(key)
+    elif MOVIE_KEYS.intersection(result):
+        raise ValueError("Unexpected stored movie search key")
     if name == "collections":
         normalized = result.pop("list_name_key", None)
         if type(result.get("list_name")) is not str or normalized != result["list_name"].casefold():
@@ -210,7 +221,7 @@ def collection_schemas(source=None):
     """Compile fresh native schemas; unsupported schema changes fail closed."""
     if source is None:
         source = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
-    return {
+    schemas = {
         collection_name(name): _compile(
             source["properties"][name]["items"],
             source["$defs"],
@@ -220,6 +231,20 @@ def collection_schemas(source=None):
         )
         for name in COLLECTIONS
     }
+    schemas["movies"]["properties"].update(
+        {
+            "title_key": {"bsonType": "string", "minLength": 1, "maxLength": 600},
+            "director_key": {"bsonType": "string", "minLength": 1, "maxLength": 360},
+            "search_key": {"bsonType": "string", "minLength": 3, "maxLength": 11853},
+            "genre_keys": {
+                "bsonType": "array",
+                "maxItems": 30,
+                "items": {"bsonType": "string", "minLength": 1, "maxLength": 240},
+            },
+        }
+    )
+    schemas["movies"]["required"].extend(sorted(MOVIE_KEYS))
+    return schemas
 
 
 def collection_indexes():
@@ -240,6 +265,11 @@ def collection_indexes():
         index("user_sessions", ["user_id", "expires_at"]),
     ]
     result["copies"] = [index("movie_copies", ["movie_id", "_id"])]
+    result["movies"] = [
+        index("movie_title_order", ["title_key", "_id"]),
+        index("movie_year_order", ["year", "_id"]),
+        index("movie_natural_key", ["year", "title_key", "director_key"]),
+    ]
     result["collection_entries"] = [
         index("owner_entry_unique", ["owner_id", "movie_id", "kind", "list_name_key"], unique=True),
         index("owner_entries", ["owner_id", "created_at", "_id"]),

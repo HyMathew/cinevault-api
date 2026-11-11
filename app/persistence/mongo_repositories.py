@@ -9,6 +9,7 @@ from bson import Int64
 from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from ..auth_storage import USERNAME
+from ..catalogue_query import MovieQuery
 from ..storage_v2 import _valid_uuid, empty_document, validate_document
 from .contracts import Record
 from .mongo_model import INT64_MAX, collection_name, decode_record, encode_record
@@ -372,6 +373,96 @@ class MongoReceipts(_Repository):
 
 
 class MongoCatalogue(_Repository):
+    def copies(self, movie_id: str | None = None) -> list[Record]:
+        self._scope.check()
+        if movie_id is not None:
+            _identity(movie_id)
+        selector = {} if movie_id is None else {"movie_id": movie_id}
+        with self._scope.collection("copies").find(
+            selector, session=self._scope._session
+        ) as cursor:
+            return [decode_record("copies", row) for row in cursor]
+
+    def search_movies(self, query: MovieQuery) -> tuple[list[Record], int]:
+        self._scope.check()
+        if type(query) is not MovieQuery:
+            raise ValueError("A canonical movie query is required")
+        selector = {}
+        if query.query:
+            selector["search_key"] = {"$regex": re.escape(query.query).replace("\0", r"\x00")}
+        if query.genre:
+            selector["genre_keys"] = query.genre
+        if query.year is not None:
+            selector["year"] = Int64(query.year)
+        direction = -1 if query.sort.startswith("-") else 1
+        field = "title_key" if query.sort.lstrip("-") == "title" else "year"
+        order = [(field, direction), ("_id", direction)]
+        collection = self._scope.collection("movies")
+        if not query.support:
+            total = collection.count_documents(selector, session=self._scope._session)
+            with (
+                collection.find(selector, session=self._scope._session)
+                .sort(order)
+                .skip(query.offset)
+                .limit(query.limit) as cursor
+            ):
+                return [decode_record("movies", row) for row in cursor], total
+        pipeline = [
+            {"$match": selector},
+            {
+                "$lookup": {
+                    "from": "copies",
+                    "localField": "_id",
+                    "foreignField": "movie_id",
+                    "pipeline": [
+                        {"$match": {"support": query.support}},
+                        {"$limit": 1},
+                        {"$project": {"_id": 1}},
+                    ],
+                    "as": "_supported",
+                }
+            },
+            {"$match": {"_supported.0": {"$exists": True}}},
+            {"$project": {"_supported": 0}},
+        ]
+        with collection.aggregate(
+            [*pipeline, {"$count": "total"}], session=self._scope._session
+        ) as cursor:
+            count = next(cursor, {"total": 0})["total"]
+        with collection.aggregate(
+            [*pipeline, {"$sort": dict(order)}, {"$skip": query.offset}, {"$limit": query.limit}],
+            session=self._scope._session,
+        ) as cursor:
+            return [decode_record("movies", row) for row in cursor], int(count)
+
+    def copy_summaries(self, movie_ids: list[str]) -> dict[str, Record]:
+        self._scope.check()
+        if type(movie_ids) is not list or len(movie_ids) > 100:
+            raise ValueError("Movie summary page must contain at most 100 identities")
+        for identity in movie_ids:
+            _identity(identity)
+        summaries = {identity: {"count": 0, "supports": []} for identity in movie_ids}
+        if not movie_ids:
+            return summaries
+        pipeline = [
+            {"$match": {"movie_id": {"$in": movie_ids}}},
+            {
+                "$group": {
+                    "_id": {"movie": "$movie_id", "support": "$support"},
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$sort": {"_id.movie": 1, "_id.support": 1}},
+        ]
+        with self._scope.collection("copies").aggregate(
+            pipeline, session=self._scope._session
+        ) as cursor:
+            for row in cursor:
+                summary = summaries[row["_id"]["movie"]]
+                summary["count"] += int(row["count"])
+                summary["supports"].append(row["_id"]["support"])
+        return summaries
+
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)
 
@@ -401,14 +492,10 @@ class MongoCatalogue(_Repository):
         selector = {"year": Int64(movie["year"])}
         if excluded_id is not None:
             selector["_id"] = {"$ne": excluded_id}
-        with self._scope.collection("movies").find(
-            selector, {"title": 1, "director": 1}, session=self._scope._session
-        ) as cursor:
-            return any(
-                record["title"].casefold() == movie["title"].casefold()
-                and record["director"].casefold() == movie["director"].casefold()
-                for record in cursor
-            )
+        selector.update(
+            title_key=movie["title"].casefold(), director_key=movie["director"].casefold()
+        )
+        return self._scope.find("movies", selector, {"_id": 1}) is not None
 
     def has_movie_references(self, movie_id: str) -> bool:
         self._scope.check()

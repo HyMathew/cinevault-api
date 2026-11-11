@@ -6,6 +6,7 @@ from os import getpid
 from threading import get_ident
 
 from ..auth_storage import USERNAME
+from ..catalogue_query import MovieQuery, movie_keys
 from ..storage_v2 import COLLECTIONS, _valid_uuid
 from .contracts import Record
 
@@ -271,6 +272,57 @@ class JsonReceipts(_Repository):
 
 
 class JsonCatalogue(_Repository):
+    def copies(self, movie_id: str | None = None) -> list[Record]:
+        self._scope.check()
+        if movie_id is not None:
+            _identity(movie_id)
+        return copy.deepcopy(
+            [
+                row
+                for row in self._scope.rows("copies")
+                if movie_id is None or row["movie_id"] == movie_id
+            ]
+        )
+
+    def search_movies(self, query: MovieQuery) -> tuple[list[Record], int]:
+        self._scope.check()
+        if type(query) is not MovieQuery:
+            raise ValueError("A canonical movie query is required")
+        supported = {
+            row["movie_id"] for row in self._scope.rows("copies") if row["support"] == query.support
+        }
+        rows = []
+        for row in self._scope.rows("movies"):
+            keys = movie_keys(row)
+            if (
+                (not query.query or query.query in keys["search_key"])
+                and (not query.genre or query.genre in keys["genre_keys"])
+                and (query.year is None or query.year == row["year"])
+                and (not query.support or row["id"] in supported)
+            ):
+                rows.append(row)
+        field = query.sort.lstrip("-")
+        rows.sort(
+            key=lambda row: (row[field].casefold() if field == "title" else row[field], row["id"]),
+            reverse=query.sort.startswith("-"),
+        )
+        return copy.deepcopy(rows[query.offset : query.offset + query.limit]), len(rows)
+
+    def copy_summaries(self, movie_ids: list[str]) -> dict[str, Record]:
+        self._scope.check()
+        if type(movie_ids) is not list or len(movie_ids) > 100:
+            raise ValueError("Movie summary page must contain at most 100 identities")
+        for identity in movie_ids:
+            _identity(identity)
+        summaries = {identity: {"count": 0, "supports": []} for identity in movie_ids}
+        for row in self._scope.rows("copies"):
+            if row["movie_id"] in summaries:
+                summary = summaries[row["movie_id"]]
+                summary["count"] += 1
+                if row["support"] not in summary["supports"]:
+                    summary["supports"].append(row["support"])
+        return summaries
+
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)
 
