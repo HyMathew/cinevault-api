@@ -18,6 +18,18 @@ from scripts.check_mongodb import (
 
 
 class MongoGateBoundaryTests(unittest.TestCase):
+    def test_kernel_incompatibility_is_rejected_without_bypassing_server_protection(self):
+        from scripts import check_mongodb
+
+        verify_kernel = getattr(check_mongodb, "verify_kernel", None)
+        self.assertTrue(callable(verify_kernel), "The gate must check the documented kernel range")
+        for release in ("6.19.0-generic", "6.20.0", "7.0.0-1017-azure", "7.0.13", "unknown"):
+            with self.subTest(release=release), self.assertRaises(RuntimeError):
+                verify_kernel(release)
+        for release in ("6.8.0-1070-azure", "6.18.17", "7.0.14", "7.1.0"):
+            with self.subTest(release=release):
+                verify_kernel(release)
+
     def test_container_with_another_owner_is_never_removed(self):
         inspected = SimpleNamespace(
             returncode=0,

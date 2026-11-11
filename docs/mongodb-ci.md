@@ -59,3 +59,29 @@ la sauvegarde/restauration, les pannes réseau ou le déploiement Swarm final.
 
 Sources primaires consultées : [replica set et keyfile](https://www.mongodb.com/docs/manual/tutorial/deploy-replica-set-with-keyfile-access-control/)
 et [cibles de connexion PyMongo / Docker](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/connect/connection-targets/).
+
+## Compatibilité du noyau de l’hôte CI
+
+Le job réel échouait avant toute connexion : MongoDB quittait au démarrage avec
+le diagnostic `SERVER-121912`, sans OOM. Le reçu instrumenté du run
+[43021147182](https://github.com/HyMathew/cinevault-api/actions/runs/43021147182)
+conserve ce refus et le nettoyage réussi. Les
+[notes officielles MongoDB](https://www.mongodb.com/docs/manual/release-notes/8.0/)
+excluent les noyaux 6.19 à 7.0.13 à cause de TCMalloc ; un conteneur conserve le
+noyau de son hôte. Changer uniquement sa distribution ne corrige pas ce défaut.
+
+Le [runner GitHub Ubuntu24.04](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
+annonce actuellement 7.0.0-1017-azure. Le job Mongo utilise donc temporairement
+[Ubuntu22.04](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2204-Readme.md),
+qui annonce 6.8.0-1070-azure. Les tests applicatifs et builds restent sur Ubuntu24.04
+et Windows comme auparavant. Le reçu enregistre le vrai noyau ; le harnais refuse
+explicitement la plage incompatible avant de créer son serveur. Aucune variable
+ne désactive la protection du moteur, aucun test n’est ignoré.
+
+Ce choix de runner doit être réexaminé avant sa fin de support GitHub annoncée,
+ou dès qu’un runner au noyau compatible est disponible. Les VM du laboratoire
+utilisent 6.8 ; aucune modification de leur noyau n’est nécessaire. Les nouvelles
+versions Mongo8.0.37/8.0.38 annoncées le 10novembre doivent aussi être qualifiées
+avant livraison : leurs tags Docker officiels retournaient404 lors de la lecture
+du registre le 11novembre. La preuve8.0.34 reste datée et n’est pas présentée comme
+validation de ces nouvelles versions ou de leurs corrections de sécurité.

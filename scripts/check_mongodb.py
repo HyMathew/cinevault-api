@@ -21,6 +21,16 @@ LABEL = "cinevault.mongodb-contract"
 REPLICA_SET = "cinevault-ci"
 
 
+def verify_kernel(release):
+    """Refuse the upstream tcmalloc-incompatible range; never bypass mongod's check."""
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", release)
+    if match is None:
+        raise RuntimeError("Unrecognized Linux kernel release")
+    version = tuple(map(int, match.groups()))
+    if (6, 19, 0) <= version < (7, 0, 14):
+        raise RuntimeError("Host kernel is in MongoDB's unsupported 6.19 through 7.0.13 range")
+
+
 class Diagnostics:
     """Bounded, sanitized diagnostics only; never retain child argv or stdin."""
 
@@ -267,6 +277,9 @@ def main():
     receipt = {"image": IMAGE, "passed": False, "started_at": datetime.now(UTC).isoformat()}
     diagnostics = Diagnostics(receipt, reports / "mongodb-check.json", sensitive)
     try:
+        diagnostics.stage("host_kernel")
+        receipt["host_kernel"] = os.uname().release
+        verify_kernel(receipt["host_kernel"])
         diagnostics.stage("pull_image")
         command(["docker", "pull", IMAGE], timeout=600, diagnostics=diagnostics)
         diagnostics.stage("start_server")
