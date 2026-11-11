@@ -1,31 +1,27 @@
 """Catalogue resources; entity versions prevent silent stale replacements."""
 
-import hashlib
-import json
 import uuid
 
-from flask import Blueprint, jsonify, request, url_for
+from flask import Blueprint, current_app, jsonify, request, url_for
 
-from .enterprise_auth import check_store, error, forbidden, no_cache, payload, protected
-from .metadata_model import valid_source
-from .validation import ValidationError, is_unicode, validate
+from .enterprise_auth import (
+    bearer,
+    check_store,
+    error,
+    forbidden,
+    no_cache,
+    now,
+    payload,
+    protected,
+    run_service,
+)
+from .services.catalogue import CatalogueService
+from .services.catalogue_model import COPY_FIELDS, SUPPORTS, copy_data, etag, movie_data, resource
+from .validation import ValidationError, is_unicode
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
 bp.after_request(no_cache)
 MOVIE_FIELDS = ("title", "year", "director", "actors", "synopsis")
-COPY_FIELDS = ("support", "location", "condition")
-SUPPORTS = ("numerique", "dvd", "blu-ray", "vhs", "autre")
-
-
-def etag(entity):
-    encoded = json.dumps(entity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    return '"' + hashlib.sha256(encoded).hexdigest() + '"'
-
-
-def resource(entity):
-    return {**entity, "_etag": etag(entity)}
 
 
 def respond(entity, status=200, location=None):
@@ -65,59 +61,19 @@ def precondition(entity):
     return None
 
 
-def movie_data(data):
-    legacy = validate(
-        {
-            "titre": data["title"],
-            "annee": data["year"],
-            "realisateur": data["director"],
-            "acteurs": data["actors"],
-            "synopsis": data["synopsis"],
-            "support": "autre",
-        }
-    )
-    genres = data.get("genres", [])
-    if (
-        not isinstance(genres, list)
-        or len(genres) > 30
-        or any(
-            not isinstance(g, str) or not is_unicode(g) or not 1 <= len(g) <= 80 or g.strip() != g
-            for g in genres
-        )
-    ):
-        raise ValidationError({"genres": "Liste de genres invalide."})
-    if len({g.casefold() for g in genres}) != len(genres):
-        raise ValidationError({"genres": "Les genres doivent être distincts."})
-    result = {
-        "title": legacy["titre"],
-        "year": legacy["annee"],
-        "director": legacy["realisateur"],
-        "actors": legacy["acteurs"],
-        "synopsis": legacy["synopsis"],
-        "genres": genres,
-    }
-    if "external_source" in data:
-        if not valid_source(data["external_source"]):
-            raise ValidationError({"external_source": "Provenance invalide."})
-        result["external_source"] = data["external_source"]
-    return result
+def catalogue_service():
+    return CatalogueService(current_app.extensions["enterprise_persistence"])
 
 
 def prepare_movie(optional, movie_id=None):
-    def parse(document, user):
-        if movie_id is not None:
-            movie = lookup(document, "movies", movie_id)
-            if movie is None:
-                return missing()
-            conflict = precondition(movie)
-            if conflict:
-                return conflict
-        return {"data": payload(MOVIE_FIELDS, optional)}
-
-    gate = management(parse)
-    if not isinstance(gate, dict):
+    gate = run_service(
+        lambda: catalogue_service().authorize(
+            bearer(), identity=movie_id, if_match=request.headers.get("If-Match"), timestamp=now()
+        )
+    )
+    if gate.status_code != 204:
         return gate
-    data = gate["data"]
+    data = payload(MOVIE_FIELDS, optional)
     attributes = movie_data(data)
     initial = copy_data(data["initial_copy"]) if "initial_copy" in data else None
     if "external_id" in data:
@@ -137,28 +93,6 @@ def prepare_movie(optional, movie_id=None):
                 "retrieved_at": film["retrieved_at"],
             }
     return {"attributes": attributes, "initial_copy": initial}
-
-
-def copy_data(data):
-    if not isinstance(data, dict) or set(data) != set(COPY_FIELDS):
-        raise ValidationError({"copy": "Champs de l’exemplaire invalides."})
-    if (
-        data["support"] not in SUPPORTS
-        or data["condition"] not in ("unknown", "good", "damaged")
-        or not isinstance(data["location"], str)
-        or not is_unicode(data["location"])
-        or len(data["location"]) > 200
-    ):
-        raise ValidationError({"copy": "Attributs de l’exemplaire invalides."})
-    return dict(data)
-
-
-def duplicate(document, candidate, excluded=None):
-    key = (candidate["title"].casefold(), candidate["year"], candidate["director"].casefold())
-    return any(
-        m["id"] != excluded and (m["title"].casefold(), m["year"], m["director"].casefold()) == key
-        for m in document["movies"]
-    )
 
 
 def bounded_integer(name, default, lower, upper):
@@ -233,21 +167,16 @@ def create_movie():
     prepared = prepare_movie(("genres", "initial_copy", "external_id"))
     if not isinstance(prepared, dict):
         return prepared
-
-    def create(document, user):
-        movie = prepared["attributes"]
-        initial_copy = prepared["initial_copy"]
-        if duplicate(document, movie):
-            return error(409, "duplicate", "Ce film existe déjà.")
-        movie["id"] = str(uuid.uuid4())
-        document["movies"].append(movie)
-        if initial_copy is not None:
-            document["copies"].append(
-                {"id": str(uuid.uuid4()), "movie_id": movie["id"], **initial_copy}
-            )
-        return respond(movie, 201, url_for("enterprise_catalogue.get_movie", movie_id=movie["id"]))
-
-    return management(create)
+    response = run_service(
+        lambda: catalogue_service().create(
+            bearer(), prepared["attributes"], initial_copy=prepared["initial_copy"], timestamp=now()
+        )
+    )
+    if response.status_code == 201:
+        response.headers["Location"] = url_for(
+            "enterprise_catalogue.get_movie", movie_id=response.get_json()["id"]
+        )
+    return response
 
 
 @bp.put("/movies/<movie_id>")
@@ -255,43 +184,24 @@ def replace_movie(movie_id):
     prepared = prepare_movie(("genres", "external_id"), movie_id)
     if not isinstance(prepared, dict):
         return prepared
-
-    def replace(document, user):
-        movie = lookup(document, "movies", movie_id)
-        if movie is None:
-            return missing()
-        conflict = precondition(movie)
-        if conflict:
-            return conflict
-        data = prepared["attributes"]
-        if duplicate(document, data, movie_id):
-            return error(409, "duplicate", "Ce film existe déjà.")
-        movie.update(data)
-        return respond(movie)
-
-    return management(replace)
+    return run_service(
+        lambda: catalogue_service().replace(
+            bearer(),
+            movie_id,
+            prepared["attributes"],
+            if_match=request.headers.get("If-Match"),
+            timestamp=now(),
+        )
+    )
 
 
 @bp.delete("/movies/<movie_id>")
 def delete_movie(movie_id):
-    def delete(document, user):
-        movie = lookup(document, "movies", movie_id)
-        if movie is None:
-            return missing()
-        conflict = precondition(movie)
-        if conflict:
-            return conflict
-        if (
-            any(c["movie_id"] == movie_id for c in document["copies"])
-            or any(e["movie_id"] == movie_id for e in document["collections"])
-            or any(candidate_loan["movie_id"] == movie_id for candidate_loan in document["loans"])
-            or any(r["movie_id"] == movie_id for r in document["reservations"])
-        ):
-            return error(409, "referenced", "Des exemplaires ou collections référencent ce film.")
-        document["movies"].remove(movie)
-        return "", 204
-
-    return management(delete)
+    return run_service(
+        lambda: catalogue_service().delete(
+            bearer(), movie_id, if_match=request.headers.get("If-Match"), timestamp=now()
+        )
+    )
 
 
 @bp.get("/copies")

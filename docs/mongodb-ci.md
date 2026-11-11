@@ -85,3 +85,12 @@ versions Mongo8.0.37/8.0.38 annoncées le 10novembre doivent aussi être qualifi
 avant livraison : leurs tags Docker officiels retournaient404 lors de la lecture
 du registre le 11novembre. La preuve8.0.34 reste datée et n’est pas présentée comme
 validation de ces nouvelles versions ou de leurs corrections de sécurité.
+
+## Services communs dans le gate
+
+Le compte applicatif limité exécute aussi `exercise_auth_service` (vrai Argon2,
+budgets, horloge et révocations) et `exercise_catalogue_service` (droits, film et
+copie initiale atomiques, doublon, ETag et références). Leurs résultats sont
+conservés dans le reçu, en plus des cinq tests pytest administrant leur base
+jetable. Ces contrats de services ne sont pas présentés comme des endpoints HTTP
+Mongo activés, une migration ou une validation complète de la circulation.

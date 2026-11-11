@@ -101,6 +101,26 @@ def record_failed_attempts(work, existing, keys, timestamp):
         )
 
 
+def authenticated(persistence, token, timestamp, operation):
+    """Read authority and touch the session in the same UoW as its business operation."""
+    digest = token_digest(token)
+    if digest is None:
+        return unauthorized()
+
+    def command(work):
+        session = work.sessions.by_token_hash(digest)
+        user = work.accounts.get(session["user_id"]) if session is not None else None
+        if not session_is_current(session, user, timestamp):
+            raise InvalidSession()
+        work.sessions.touch(session["id"], timestamp)
+        return operation(work, user, session)
+
+    try:
+        return persistence.run(command)
+    except InvalidSession:
+        return unauthorized()
+
+
 class AuthenticationService:
     def __init__(self, persistence, *, hasher, dummy_hash, throttle_key):
         self._persistence = persistence
@@ -156,22 +176,7 @@ class AuthenticationService:
         return self._persistence.run(command)
 
     def _protected(self, token, timestamp, operation):
-        digest = token_digest(token)
-        if digest is None:
-            return unauthorized()
-
-        def command(work):
-            session = work.sessions.by_token_hash(digest)
-            user = work.accounts.get(session["user_id"]) if session is not None else None
-            if not session_is_current(session, user, timestamp):
-                raise InvalidSession()
-            work.sessions.touch(session["id"], timestamp)
-            return operation(work, user, session)
-
-        try:
-            return self._persistence.run(command)
-        except InvalidSession:
-            return unauthorized()
+        return authenticated(self._persistence, token, timestamp, operation)
 
     def me(self, token, *, timestamp):
         return self._protected(

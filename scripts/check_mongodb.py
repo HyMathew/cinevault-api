@@ -248,6 +248,16 @@ def application_contract(client, address, password, attempt):
         address, username="application", password=password, authSource=name, **options
     ) as app:
         result = contract.exercise_backend(app[name], maintenance_database=database)
+        for filename, function, key in (
+            ("test_authentication_service.py", "exercise_auth_service", "authentication_service"),
+            ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
+        ):
+            service_spec = importlib.util.spec_from_file_location(
+                "cinevault_native_" + key, root / "tests" / filename
+            )
+            service_contract = importlib.util.module_from_spec(service_spec)
+            service_spec.loader.exec_module(service_contract)
+            result[key] = getattr(service_contract, function)(app[name])
         denied(lambda: app[name].users.create_index("display_name"))
         denied(lambda: app[name].command("createUser", "forbidden", pwd="unused", roles=[]))
         denied(lambda: app["other_database"].users.find_one({}))

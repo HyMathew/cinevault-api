@@ -216,9 +216,9 @@ def authentication_service():
     )
 
 
-def render_service(operation):
+def run_service(operation):
     try:
-        result = operation(authentication_service())
+        result = operation()
     except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
         current_app.logger.error("Stockage Enterprise indisponible : %s", type(exc).__name__)
         raise ServiceUnavailable("Stockage indisponible.") from exc
@@ -231,6 +231,10 @@ def render_service(operation):
     response.status_code = result.status
     response.headers.update(result.headers)
     return response
+
+
+def render_service(operation):
+    return run_service(lambda: operation(authentication_service()))
 
 
 @bp.post("/auth/login")
