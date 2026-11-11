@@ -239,6 +239,37 @@ class JsonAttempts(_Repository):
         rows.append(candidate)
 
 
+class JsonReceipts(_Repository):
+    def get(self, actor_id: str, key_hash: str) -> Record | None:
+        self._scope.check()
+        _identity(actor_id)
+        if not isinstance(key_hash, str) or _HASH.fullmatch(key_hash) is None:
+            raise ValueError("Receipt key must be a canonical digest")
+        return next(
+            (
+                copy.deepcopy(row)
+                for row in self._scope.rows("idempotency_records")
+                if row["actor_id"] == actor_id and row["key_hash"] == key_hash
+            ),
+            None,
+        )
+
+    def count(self) -> int:
+        return len(self._scope.rows("idempotency_records"))
+
+    def prune_expired(self, timestamp: int) -> int:
+        self._scope.check(write=True)
+        _timestamp(timestamp)
+        rows = self._scope.rows("idempotency_records", write=True)
+        retained = [row for row in rows if row["expires_at"] > timestamp]
+        removed = len(rows) - len(retained)
+        rows[:] = retained
+        return removed
+
+    def insert(self, receipt: Record) -> None:
+        self._insert("idempotency_records", receipt)
+
+
 class JsonCatalogue(_Repository):
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)

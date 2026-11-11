@@ -10,6 +10,7 @@ from .json_repositories import (
     JsonAccounts,
     JsonAttempts,
     JsonCatalogue,
+    JsonReceipts,
     JsonSessions,
     _DocumentScope,
 )
@@ -23,6 +24,7 @@ class _JsonWork:
         self._sessions = JsonSessions(self._scope)
         self._attempts = JsonAttempts(self._scope)
         self._catalogue = JsonCatalogue(self._scope)
+        self._receipts = JsonReceipts(self._scope)
 
     @property
     def revision(self) -> int:
@@ -48,6 +50,11 @@ class _JsonWork:
     def attempts(self) -> JsonAttempts:
         self._scope.check()
         return self._attempts
+
+    @property
+    def receipts(self) -> JsonReceipts:
+        self._scope.check()
+        return self._receipts
 
     def _close(self):
         self._scope.close()

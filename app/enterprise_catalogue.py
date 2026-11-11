@@ -1,7 +1,5 @@
 """Catalogue resources; entity versions prevent silent stale replacements."""
 
-import uuid
-
 from flask import Blueprint, current_app, jsonify, request, url_for
 
 from .enterprise_auth import (
@@ -17,7 +15,8 @@ from .enterprise_auth import (
 )
 from .services.catalogue import CatalogueService
 from .services.catalogue_model import COPY_FIELDS, SUPPORTS, copy_data, etag, movie_data, resource
-from .validation import ValidationError, is_unicode
+from .services.copies import CopyService
+from .validation import ValidationError
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
 bp.after_request(no_cache)
@@ -63,6 +62,10 @@ def precondition(entity):
 
 def catalogue_service():
     return CatalogueService(current_app.extensions["enterprise_persistence"])
+
+
+def copy_service():
+    return CopyService(current_app.extensions["enterprise_persistence"])
 
 
 def prepare_movie(optional, movie_id=None):
@@ -226,53 +229,43 @@ def get_copy(copy_id):
 
 @bp.post("/copies")
 def create_copy():
-    def create(document, user):
-        data = payload(("movie_id", *COPY_FIELDS))
-        if not isinstance(data["movie_id"], str) or not is_unicode(data["movie_id"]):
-            raise ValidationError({"movie_id": "Identifiant de film invalide."})
-        attributes = copy_data({k: data[k] for k in COPY_FIELDS})
-
-        def insert():
-            if lookup(document, "movies", data["movie_id"]) is None:
-                return missing()
-            copy = {"id": str(uuid.uuid4()), "movie_id": data["movie_id"], **attributes}
-            document["copies"].append(copy)
-            return respond(copy, 201, url_for("enterprise_catalogue.get_copy", copy_id=copy["id"]))
-
-        from .idempotency import create_copy_once
-
-        return create_copy_once(document, user, data, insert)
-
-    return management(create)
+    gate = run_service(lambda: copy_service().authorize(bearer(), timestamp=now()))
+    if gate.status_code != 204:
+        return gate
+    data = payload(("movie_id", *COPY_FIELDS))
+    response = run_service(
+        lambda: copy_service().create(
+            bearer(), data, key=request.headers.get("Idempotency-Key"), timestamp=now()
+        )
+    )
+    if response.status_code == 201:
+        response.headers["Location"] = url_for(
+            "enterprise_catalogue.get_copy", copy_id=response.get_json()["id"]
+        )
+    return response
 
 
 @bp.put("/copies/<copy_id>")
 def replace_copy(copy_id):
-    def replace(document, user):
-        copy = lookup(document, "copies", copy_id)
-        if copy is None:
-            return missing()
-        conflict = precondition(copy)
-        if conflict:
-            return conflict
-        copy.update(copy_data(payload(COPY_FIELDS)))
-        return respond(copy)
-
-    return management(replace)
+    gate = run_service(
+        lambda: copy_service().authorize(
+            bearer(), identity=copy_id, if_match=request.headers.get("If-Match"), timestamp=now()
+        )
+    )
+    if gate.status_code != 204:
+        return gate
+    data = payload(COPY_FIELDS)
+    return run_service(
+        lambda: copy_service().replace(
+            bearer(), copy_id, data, if_match=request.headers.get("If-Match"), timestamp=now()
+        )
+    )
 
 
 @bp.delete("/copies/<copy_id>")
 def delete_copy(copy_id):
-    def delete(document, user):
-        copy = lookup(document, "copies", copy_id)
-        if copy is None:
-            return missing()
-        conflict = precondition(copy)
-        if conflict:
-            return conflict
-        if any(candidate_loan["copy_id"] == copy_id for candidate_loan in document["loans"]):
-            return error(409, "referenced", "Un historique de prêt référence cet exemplaire.")
-        document["copies"].remove(copy)
-        return "", 204
-
-    return management(delete)
+    return run_service(
+        lambda: copy_service().delete(
+            bearer(), copy_id, if_match=request.headers.get("If-Match"), timestamp=now()
+        )
+    )

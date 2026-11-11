@@ -35,7 +35,15 @@ class _MongoScope:
         self._owner = (getpid(), get_ident())
         self._failure = None
         self._dirty = {
-            name: set() for name in ("users", "sessions", "movies", "copies", "auth_attempts")
+            name: set()
+            for name in (
+                "users",
+                "sessions",
+                "movies",
+                "copies",
+                "auth_attempts",
+                "idempotency_records",
+            )
         }
         self._deleted = {name: set() for name in ("movies", "copies")}
 
@@ -100,8 +108,9 @@ class _MongoScope:
                 document = empty_document()
                 document["revision"] = self._revision
                 document[name] = [record]
-                if name == "sessions":
-                    parent = self.find("users", {"_id": record["user_id"]})
+                if name in ("sessions", "idempotency_records"):
+                    parent_id = record["user_id"] if name == "sessions" else record["actor_id"]
+                    parent = self.find("users", {"_id": parent_id})
                     if parent is not None:
                         document["users"] = [decode_record("users", parent)]
                 elif name == "copies":
@@ -322,6 +331,44 @@ class MongoAttempts(_Repository):
             if result.matched_count != 1:
                 raise LookupError("Attempt identity does not exist")
         self._scope._dirty["auth_attempts"].add(identity)
+
+
+class MongoReceipts(_Repository):
+    def get(self, actor_id: str, key_hash: str) -> Record | None:
+        self._scope.check()
+        _identity(actor_id)
+        if not isinstance(key_hash, str) or _HASH.fullmatch(key_hash) is None:
+            raise ValueError("Receipt key must be a canonical digest")
+        raw = self._scope.find("idempotency_records", {"actor_id": actor_id, "key_hash": key_hash})
+        return decode_record("idempotency_records", raw) if raw is not None else None
+
+    def count(self) -> int:
+        return self._scope.collection("idempotency_records").count_documents(
+            {}, session=self._scope._session
+        )
+
+    def prune_expired(self, timestamp: int) -> int:
+        self._scope.check(write=True)
+        _timestamp(timestamp)
+        removed = 0
+        cursor = self._scope.collection("idempotency_records").find(
+            {"expires_at": {"$lte": Int64(timestamp)}}, {"_id": 1}, session=self._scope._session
+        )
+        with cursor:
+            while batch := list(islice(cursor, 500)):
+                identities = [record["_id"] for record in batch]
+                result = self._scope.write(
+                    self._scope.collection("idempotency_records").delete_many,
+                    {"_id": {"$in": identities}},
+                )
+                if result.deleted_count != len(identities):
+                    raise ValueError("Receipt deletion is inconsistent")
+                self._scope.release(identities, "idempotency_records")
+                removed += result.deleted_count
+        return removed
+
+    def insert(self, receipt: Record) -> None:
+        self._insert("idempotency_records", receipt)
 
 
 class MongoCatalogue(_Repository):

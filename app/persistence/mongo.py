@@ -13,6 +13,7 @@ from .mongo_repositories import (
     MongoAccounts,
     MongoAttempts,
     MongoCatalogue,
+    MongoReceipts,
     MongoSessions,
     _MongoScope,
 )
@@ -26,6 +27,7 @@ class _MongoWork:
         self._sessions = MongoSessions(scope)
         self._attempts = MongoAttempts(scope)
         self._catalogue = MongoCatalogue(scope)
+        self._receipts = MongoReceipts(scope)
 
     @property
     def revision(self) -> int:
@@ -51,6 +53,11 @@ class _MongoWork:
     def attempts(self) -> MongoAttempts:
         self._scope.check()
         return self._attempts
+
+    @property
+    def receipts(self) -> MongoReceipts:
+        self._scope.check()
+        return self._receipts
 
 
 class MongoPersistence:

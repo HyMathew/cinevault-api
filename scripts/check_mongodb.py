@@ -251,6 +251,7 @@ def application_contract(client, address, password, attempt):
         for filename, function, key in (
             ("test_authentication_service.py", "exercise_auth_service", "authentication_service"),
             ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
+            ("test_copy_service.py", "exercise_copy_service", "copy_service"),
         ):
             service_spec = importlib.util.spec_from_file_location(
                 "cinevault_native_" + key, root / "tests" / filename
