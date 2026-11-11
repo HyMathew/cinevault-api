@@ -194,6 +194,51 @@ class JsonSessions(_Repository):
         return removed
 
 
+class JsonAttempts(_Repository):
+    def get_many(self, keys: list[str]) -> dict[str, Record]:
+        self._scope.check()
+        if type(keys) is not list or any(
+            not isinstance(key, str) or _HASH.fullmatch(key) is None for key in keys
+        ):
+            raise ValueError("Attempt keys must be canonical HMAC strings")
+        selected = set(keys)
+        return {
+            row["key"]: copy.deepcopy(row)
+            for row in self._scope.rows("auth_attempts")
+            if row["key"] in selected
+        }
+
+    def count(self) -> int:
+        return len(self._scope.rows("auth_attempts"))
+
+    def prune_expired(self, timestamp: int, *, window: int) -> int:
+        self._scope.check(write=True)
+        _timestamp(timestamp)
+        if type(window) is not int or window <= 0:
+            raise ValueError("Attempt window must be a positive integer")
+        rows = self._scope.rows("auth_attempts", write=True)
+        retained = [row for row in rows if timestamp - row["window_start"] < window]
+        removed = len(rows) - len(retained)
+        rows[:] = retained
+        return removed
+
+    def set(self, attempt: Record) -> None:
+        self._scope.check(write=True)
+        if (
+            type(attempt) is not dict
+            or not isinstance(attempt.get("key"), str)
+            or _HASH.fullmatch(attempt["key"]) is None
+        ):
+            raise ValueError("Attempt identity must be a canonical HMAC string")
+        candidate = copy.deepcopy(attempt)
+        rows = self._scope.rows("auth_attempts", write=True)
+        for index, row in enumerate(rows):
+            if row["key"] == candidate["key"]:
+                rows[index] = candidate
+                return
+        rows.append(candidate)
+
+
 class JsonCatalogue(_Repository):
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)

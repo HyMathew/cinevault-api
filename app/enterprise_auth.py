@@ -1,6 +1,5 @@
-"""Enterprise account routes; a user identity is verified only by this service."""
+"""Enterprise account HTTP boundary and transitional document-route helpers."""
 
-import hashlib
 import hmac
 import json
 import secrets
@@ -10,21 +9,27 @@ from pathlib import Path
 
 import portalocker
 from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerificationError
 from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.exceptions import BadRequest, ServiceUnavailable, UnsupportedMediaType
 
-from .auth_storage import USERNAME
 from .client_context import InvalidClientContext, client_address, install_client_context
+from .persistence.json import JsonPersistence
 from .registration_admission import RegistrationAdmission, RegistrationBusy
 from .repository import unique_pairs
+from .services.authentication import (
+    AuthenticationService,
+    InvalidSession,
+    attempt_key,
+    normalize_username,
+    public_profile,
+    session_is_current,
+    token_digest,
+    valid_display,
+    valid_password,
+)
 from .storage_v2 import V2Store
-from .validation import ValidationError, is_unicode
+from .validation import ValidationError
 
-SESSION_TTL = 28800
-IDLE_TTL = 1800
-WINDOW = 900
-MAX_ATTEMPTS = 5
 bp = Blueprint("enterprise_auth", __name__, url_prefix="/api/v1")
 hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 
@@ -56,35 +61,6 @@ def payload(required, optional=()):
     return value
 
 
-def valid_password(password):
-    return (
-        isinstance(password, str)
-        and is_unicode(password)
-        and 12 <= len(password) <= 256
-        and len(password.encode("utf-8")) <= 1024
-    )
-
-
-def valid_display(name):
-    return (
-        isinstance(name, str)
-        and is_unicode(name)
-        and 1 <= len(name) <= 120
-        and name == name.strip()
-    )
-
-
-def normalize_username(username):
-    if not isinstance(username, str):
-        return None
-    username = username.strip().lower()
-    return username if USERNAME.fullmatch(username) else None
-
-
-def public_profile(user):
-    return {k: user[k] for k in ("id", "username", "display_name", "role", "enabled")}
-
-
 def transact(operation):
     try:
         return current_app.extensions["enterprise_store"].transact(operation)
@@ -105,12 +81,6 @@ def now():
     return int(current_app.config.get("AUTH_CLOCK", time.time)())
 
 
-def token_digest(token):
-    if not isinstance(token, str) or not token.isascii() or not 20 <= len(token) <= 128:
-        return None
-    return hashlib.sha256(token.encode("ascii")).hexdigest()
-
-
 def bearer():
     value = request.headers.get("Authorization", "")
     parts = value.split(" ")
@@ -123,16 +93,9 @@ def find_session(document, token, timestamp):
         return None, None
     for session in document["sessions"]:
         if hmac.compare_digest(session["token_hash"], digest):
-            if (
-                timestamp >= session["expires_at"]
-                or timestamp >= session["last_seen"] + IDLE_TTL
-                or timestamp < session["last_seen"]
-            ):
+            user = next((u for u in document["users"] if u["id"] == session["user_id"]), None)
+            if not session_is_current(session, user, timestamp):
                 return None, None
-            user = next(
-                (u for u in document["users"] if u["id"] == session["user_id"] and u["enabled"]),
-                None,
-            )
             if user:
                 session["last_seen"] = timestamp
                 return user, session
@@ -141,10 +104,6 @@ def find_session(document, token, timestamp):
 
 def unauthorized():
     return error(401, "unauthorized", "Authentification requise ou invalide.")
-
-
-class InvalidSession(Exception):
-    """Abort a transaction before a rejected identity can cause a disk write."""
 
 
 def protected(operation):
@@ -244,133 +203,67 @@ def register():
 
 def limit_key(prefix, value):
     key = current_app.extensions["auth_throttle_key"]
-    return hmac.new(key, (prefix + value).encode("utf-8"), hashlib.sha256).hexdigest()
+    return attempt_key(key, prefix, value)
 
 
-def attempt_budget(document, keys, timestamp):
-    # Keep future windows on clock rollback; another authentication route must not reset them.
-    document["auth_attempts"][:] = [
-        attempt
-        for attempt in document["auth_attempts"]
-        if timestamp - attempt["window_start"] < WINDOW
-    ]
-    existing = {attempt["key"]: attempt for attempt in document["auth_attempts"]}
-    if any(existing.get(key, {}).get("count", 0) >= MAX_ATTEMPTS for key in keys):
-        response, status = error(429, "rate_limited", "Trop de tentatives.")
-        response.headers["Retry-After"] = str(WINDOW)
-        return existing, (response, status)
-    if len(existing) + len(set(keys) - existing.keys()) > 10000:
-        return existing, error(
-            503, "auth_attempt_capacity", "Capacité de vérification temporairement atteinte."
-        )
-    return existing, None
+def authentication_service():
+    # Resolve the current crypto dependency per request; startup creates the dummy hash once.
+    return AuthenticationService(
+        current_app.extensions["enterprise_persistence"],
+        hasher=hasher,
+        dummy_hash=current_app.extensions["auth_dummy_hash"],
+        throttle_key=current_app.extensions["auth_throttle_key"],
+    )
 
 
-def record_failed_attempts(document, existing, keys, timestamp):
-    for key in keys:
-        if key in existing:
-            existing[key]["count"] += 1
-        else:
-            document["auth_attempts"].append({"key": key, "window_start": timestamp, "count": 1})
+def render_service(operation):
+    try:
+        result = operation(authentication_service())
+    except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
+        current_app.logger.error("Stockage Enterprise indisponible : %s", type(exc).__name__)
+        raise ServiceUnavailable("Stockage indisponible.") from exc
+    if result.error is not None:
+        response = jsonify(error=result.error)
+    elif result.body is not None:
+        response = jsonify(result.body)
+    else:
+        response = current_app.response_class()
+    response.status_code = result.status
+    response.headers.update(result.headers)
+    return response
 
 
 @bp.post("/auth/login")
 def login():
     data = payload(("username", "password"))
-    supplied_user = normalize_username(data["username"])
-    supplied_password = (
-        data["password"]
-        if isinstance(data["password"], str)
-        and is_unicode(data["password"])
-        and len(data["password"]) <= 256
-        else ""
-    )
-    username = supplied_user or "<invalid>"
-    timestamp = now()
-    keys = [limit_key("user:", username), limit_key("ip:", g.auth_client_address)]
-    dummy = current_app.extensions["auth_dummy_hash"]
-
-    def attempt(doc):
-        existing, problem = attempt_budget(doc, keys, timestamp)
-        if problem:
-            return "rejected", problem
-        user = next((u for u in doc["users"] if u["username"] == username), None)
-        try:
-            ok = hasher.verify(user["password_hash"] if user else dummy, supplied_password)
-        except (VerificationError, InvalidHashError):
-            ok = False
-        if not ok or not user or not user["enabled"]:
-            record_failed_attempts(doc, existing, keys, timestamp)
-            return "invalid", None
-        token = secrets.token_urlsafe(32)
-        doc["sessions"][:] = [
-            s
-            for s in doc["sessions"]
-            if s["expires_at"] > timestamp and s["last_seen"] + IDLE_TTL > timestamp
-        ]
-        doc["sessions"].append(
-            {
-                "id": str(uuid.uuid4()),
-                "user_id": user["id"],
-                "token_hash": token_digest(token),
-                "created_at": timestamp,
-                "last_seen": timestamp,
-                "expires_at": timestamp + SESSION_TTL,
-            }
+    return render_service(
+        lambda service: service.login(
+            data["username"], data["password"], address=g.auth_client_address, timestamp=now()
         )
-        return "ok", token
-
-    outcome, value = transact(attempt)
-    if outcome == "rejected":
-        return value
-    if outcome != "ok":
-        return unauthorized()
-    return {"token": value, "token_type": "Bearer", "expires_in": SESSION_TTL}
+    )
 
 
 @bp.get("/me")
 def me():
-    return protected(lambda doc, user, session: (jsonify(public_profile(user)), 200))
+    return render_service(lambda service: service.me(bearer(), timestamp=now()))
 
 
 @bp.patch("/me")
 def update_me():
     data = payload(("display_name",))
-    if not valid_display(data["display_name"]):
-        raise ValidationError({"display_name": "Nom invalide."})
-
-    def update(doc, user, session):
-        user["display_name"] = data["display_name"]
-        return jsonify(public_profile(user)), 200
-
-    return protected(update)
+    return render_service(
+        lambda service: service.update_me(bearer(), data["display_name"], timestamp=now())
+    )
 
 
 @bp.put("/me/password")
 def change_password():
     data = payload(("current_password", "new_password"))
-    if not valid_password(data["new_password"]):
-        raise ValidationError({"new_password": "Mot de passe invalide."})
-    current = data["current_password"]
-    if not isinstance(current, str) or not is_unicode(current) or len(current) > 256:
-        return unauthorized()
-
-    def change(doc, user, session):
-        timestamp = now()
-        keys = [limit_key("reauth:user:", user["id"])]
-        existing, problem = attempt_budget(doc, keys, timestamp)
-        if problem:
-            return problem
-        try:
-            hasher.verify(user["password_hash"], current)
-        except (VerificationError, InvalidHashError):
-            record_failed_attempts(doc, existing, keys, timestamp)
-            return unauthorized()
-        user["password_hash"] = hasher.hash(data["new_password"])
-        doc["sessions"][:] = [s for s in doc["sessions"] if s["user_id"] != user["id"]]
-        return "", 204
-
-    return protected(change)
+    return render_service(
+        lambda service: service.change_password(
+            bearer(), data["current_password"], data["new_password"], timestamp=now()
+        )
+    )
 
 
 def forbidden():
@@ -460,11 +353,7 @@ def update_user(user_id):
 
 @bp.post("/auth/logout")
 def logout():
-    def revoke(doc, user, session):
-        doc["sessions"].remove(session)
-        return "", 204
-
-    return protected(revoke)
+    return render_service(lambda service: service.logout(bearer(), timestamp=now()))
 
 
 def install_enterprise(app):
@@ -477,7 +366,10 @@ def install_enterprise(app):
         raise RuntimeError("Enterprise requires an existing v2 store and a 32-byte throttle key")
     store = V2Store(path)
     store.read()
+    # Transitional document routes and extracted services use the SAME file/lock.
+    # MongoDB selection remains disabled until every business route uses ports.
     app.extensions["enterprise_store"] = store
+    app.extensions["enterprise_persistence"] = JsonPersistence(path)
     app.extensions["auth_throttle_key"] = key
     app.extensions["auth_dummy_hash"] = hasher.hash(secrets.token_urlsafe(32))
     install_client_context(app)

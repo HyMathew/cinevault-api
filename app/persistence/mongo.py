@@ -9,7 +9,13 @@ from pymongo import ReturnDocument
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
 from .mongo_model import INT64_MAX
-from .mongo_repositories import MongoAccounts, MongoCatalogue, MongoSessions, _MongoScope
+from .mongo_repositories import (
+    MongoAccounts,
+    MongoAttempts,
+    MongoCatalogue,
+    MongoSessions,
+    _MongoScope,
+)
 from .mongo_transactions import TransactionRunner
 
 
@@ -18,6 +24,7 @@ class _MongoWork:
         self._scope = scope
         self._accounts = MongoAccounts(scope)
         self._sessions = MongoSessions(scope)
+        self._attempts = MongoAttempts(scope)
         self._catalogue = MongoCatalogue(scope)
 
     @property
@@ -39,6 +46,11 @@ class _MongoWork:
     def catalogue(self) -> MongoCatalogue:
         self._scope.check()
         return self._catalogue
+
+    @property
+    def attempts(self) -> MongoAttempts:
+        self._scope.check()
+        return self._attempts
 
 
 class MongoPersistence:

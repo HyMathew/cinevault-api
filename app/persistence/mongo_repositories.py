@@ -34,7 +34,9 @@ class _MongoScope:
         self._revision = revision
         self._owner = (getpid(), get_ident())
         self._failure = None
-        self._dirty = {name: set() for name in ("users", "sessions", "movies", "copies")}
+        self._dirty = {
+            name: set() for name in ("users", "sessions", "movies", "copies", "auth_attempts")
+        }
         self._deleted = {name: set() for name in ("movies", "copies")}
 
     def check(self, *, write=False):
@@ -273,6 +275,53 @@ class MongoSessions(_Repository):
         if timestamp >= idle_ttl:
             conditions.append({"last_seen": {"$lte": Int64(timestamp - idle_ttl)}})
         return self._delete_matching({"$or": conditions})
+
+
+class MongoAttempts(_Repository):
+    def get_many(self, keys: list[str]) -> dict[str, Record]:
+        self._scope.check()
+        if type(keys) is not list or any(
+            not isinstance(key, str) or _HASH.fullmatch(key) is None for key in keys
+        ):
+            raise ValueError("Attempt keys must be canonical HMAC strings")
+        with self._scope.collection("auth_attempts").find(
+            {"_id": {"$in": keys}}, session=self._scope._session
+        ) as cursor:
+            records = [decode_record("auth_attempts", record) for record in cursor]
+        return {record["key"]: record for record in records}
+
+    def count(self) -> int:
+        return self._scope.collection("auth_attempts").count_documents(
+            {}, session=self._scope._session
+        )
+
+    def prune_expired(self, timestamp: int, *, window: int) -> int:
+        self._scope.check(write=True)
+        _timestamp(timestamp)
+        if type(window) is not int or window <= 0:
+            raise ValueError("Attempt window must be a positive integer")
+        if timestamp < window:
+            return 0
+        result = self._scope.write(
+            self._scope.collection("auth_attempts").delete_many,
+            {"window_start": {"$lte": Int64(timestamp - window)}},
+        )
+        return result.deleted_count
+
+    def set(self, attempt: Record) -> None:
+        self._scope.check(write=True)
+        encoded = encode_record("auth_attempts", attempt)
+        identity = encoded["_id"]
+        collection = self._scope.collection("auth_attempts")
+        if self._scope.find("auth_attempts", {"_id": identity}, {"_id": 1}) is None:
+            self._scope.write(collection.insert_one, encoded)
+        else:
+            result = self._scope.write(
+                collection.replace_one, {"_id": identity}, encoded, upsert=False
+            )
+            if result.matched_count != 1:
+                raise LookupError("Attempt identity does not exist")
+        self._scope._dirty["auth_attempts"].add(identity)
 
 
 class MongoCatalogue(_Repository):

@@ -6,7 +6,13 @@ from pathlib import Path
 from ..storage_v2 import V2Store
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
-from .json_repositories import JsonAccounts, JsonCatalogue, JsonSessions, _DocumentScope
+from .json_repositories import (
+    JsonAccounts,
+    JsonAttempts,
+    JsonCatalogue,
+    JsonSessions,
+    _DocumentScope,
+)
 
 
 class _JsonWork:
@@ -15,6 +21,7 @@ class _JsonWork:
         self._revision = document["revision"] + int(writable)
         self._accounts = JsonAccounts(self._scope)
         self._sessions = JsonSessions(self._scope)
+        self._attempts = JsonAttempts(self._scope)
         self._catalogue = JsonCatalogue(self._scope)
 
     @property
@@ -36,6 +43,11 @@ class _JsonWork:
     def catalogue(self) -> JsonCatalogue:
         self._scope.check()
         return self._catalogue
+
+    @property
+    def attempts(self) -> JsonAttempts:
+        self._scope.check()
+        return self._attempts
 
     def _close(self):
         self._scope.close()
