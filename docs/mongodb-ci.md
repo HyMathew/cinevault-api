@@ -28,6 +28,11 @@ de test ; aucune valeur secrète n’est passée comme argument de commande. Les
 directives de masquage GitHub précèdent les tests et les rapports sont assainis
 avant conservation. Les exceptions publiques n’incluent ni URI ni réponse brute
 du driver. Aucun journal serveur brut n’est téléversé.
+En cas d’échec, le reçu conserve la phase, le dernier refus enfant assaini
+(4096 caractères par flux), l’état du serveur possédé (dont exit/OOM) et au plus
+80 lignes de journaux assainis, bornées à 12288 caractères. Les arguments et
+l’entrée standard des commandes ne sont jamais conservés. L’assainissement
+précède la troncature afin de ne pas exposer un fragment de secret long.
 
 ## Contrôles réellement demandés au moteur
 

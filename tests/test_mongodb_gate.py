@@ -7,7 +7,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.check_mongodb import LABEL, cleanup_container, redact, verify_junit
+from scripts.check_mongodb import (
+    LABEL,
+    Diagnostics,
+    cleanup_container,
+    command,
+    redact,
+    verify_junit,
+)
 
 
 class MongoGateBoundaryTests(unittest.TestCase):
@@ -66,3 +73,31 @@ class MongoGateBoundaryTests(unittest.TestCase):
     def test_long_uri_is_redacted_before_password_fragment(self):
         uri = "mongodb://user:secret@127.0.0.1:1234/?authSource=admin"
         self.assertEqual(redact(uri + " secret", ["secret", uri]), "[REDACTED] [REDACTED]")
+
+    def test_forced_child_failure_persists_only_bounded_sanitized_output(self):
+        password, key = "secret-password-value", "long-keyfile-value" * 400
+        uri = "mongodb://someone:unexpected-value@localhost:1234/?authSource=admin"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "receipt.json"
+            receipt = {}
+            diagnostics = Diagnostics(receipt, path, [password, key])
+            diagnostics.stage("wait_ping")
+            result = SimpleNamespace(
+                returncode=2,
+                stdout=key + " " + password,
+                stderr="X" * 5000 + " " + uri,
+            )
+            with patch("scripts.check_mongodb.subprocess.run", return_value=result):
+                with self.assertRaisesRegex(RuntimeError, "sanitized") as caught:
+                    command(["child", password], data=key, diagnostics=diagnostics)
+            saved = path.read_text(encoding="utf-8")
+            for secret in (password, key, uri, "unexpected-value"):
+                self.assertNotIn(secret, saved)
+                self.assertNotIn(secret, str(caught.exception))
+            failure = json.loads(saved)["last_child_failure"]
+            self.assertEqual(failure["stage"], "wait_ping")
+            self.assertEqual(failure["returncode"], 2)
+            self.assertLessEqual(len(failure["stdout_tail"]), 4096)
+            self.assertLessEqual(len(failure["stderr_tail"]), 4096)
+            self.assertNotIn("arguments", failure)
+            self.assertNotIn("stdin", failure)

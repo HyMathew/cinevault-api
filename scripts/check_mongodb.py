@@ -4,6 +4,7 @@ import base64
 import importlib.util
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -20,20 +21,58 @@ LABEL = "cinevault.mongodb-contract"
 REPLICA_SET = "cinevault-ci"
 
 
-def command(arguments, *, data=None, env=None, timeout=120):
+class Diagnostics:
+    """Bounded, sanitized diagnostics only; never retain child argv or stdin."""
+
+    def __init__(self, receipt, path, sensitive):
+        self.receipt, self.path, self.sensitive = receipt, path, sensitive
+
+    def save(self):
+        self.path.write_text(json.dumps(self.receipt, indent=2), encoding="utf-8")
+
+    def stage(self, name):
+        self.receipt["stage"] = name
+        self.save()
+
+    def failure(self, *, stdout="", stderr="", returncode=None, timeout=False):
+        def safe(value):
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", errors="replace")
+            return redact(value or "", self.sensitive)[-4096:]
+
+        self.receipt["last_child_failure"] = {
+            "stage": self.receipt["stage"],
+            "returncode": returncode,
+            "timeout": timeout,
+            "stdout_tail": safe(stdout),
+            "stderr_tail": safe(stderr),
+        }
+        self.save()
+
+
+def command(arguments, *, data=None, env=None, timeout=120, diagnostics=None):
     """Capture all child output: failures must never interpolate secret input/URIs."""
-    result = subprocess.run(
-        arguments,
-        input=data,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        timeout=timeout,
-        env=env,
-    )
+    try:
+        result = subprocess.run(
+            arguments,
+            input=data,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if diagnostics:
+            diagnostics.failure(stdout=exc.stdout, stderr=exc.stderr, timeout=True)
+        raise RuntimeError("Child command timed out (output sanitized in receipt)") from None
     if result.returncode:
-        raise RuntimeError("Child command failed (output withheld)")
+        if diagnostics:
+            diagnostics.failure(
+                stdout=result.stdout, stderr=result.stderr, returncode=result.returncode
+            )
+        raise RuntimeError("Child command failed (output sanitized in receipt)")
     return result.stdout
 
 
@@ -41,7 +80,8 @@ def redact(text, values):
     for value in sorted(values, key=len, reverse=True):
         if value:
             text = text.replace(value, "[REDACTED]")
-    return text
+    # Also remove an unexpected URI, including credentials not in the known list.
+    return re.sub(r"mongodb(?:\+srv)?://[^\s\"'<>]+", "[MONGODB_URI]", text)
 
 
 def verify_junit(path):
@@ -78,17 +118,20 @@ def cleanup_container(name, attempt):
     return result.returncode == 0
 
 
-def wait_shell(container, script):
-    for _ in range(60):
+def wait_shell(container, script, *, diagnostics=None):
+    for attempt in range(60):
         try:
-            shell(container, script)
+            shell(container, script, diagnostics=diagnostics)
             return
         except (RuntimeError, subprocess.TimeoutExpired):
+            if diagnostics:
+                diagnostics.receipt["wait_attempts"] = attempt + 1
+                diagnostics.save()
             time.sleep(1)
     raise RuntimeError("Disposable MongoDB startup deadline exceeded")
 
 
-def shell(container, script):
+def shell(container, script, *, diagnostics=None):
     return command(
         [
             "docker",
@@ -105,7 +148,40 @@ def shell(container, script):
         ],
         data=script,
         timeout=10,
+        diagnostics=diagnostics,
     )
+
+
+def capture_server_diagnostics(container, attempt, diagnostics):
+    """Inspect/log only the exact owned server, before cleanup removes it."""
+    raw = command(["docker", "container", "inspect", container], timeout=10)
+    info = json.loads(raw)[0]
+    if (
+        info.get("Name") != "/" + container
+        or info.get("Config", {}).get("Labels", {}).get(LABEL) != attempt
+    ):
+        diagnostics.receipt["server_diagnostics"] = "ownership mismatch; refused"
+        return
+    state = info.get("State", {})
+    diagnostics.receipt["server_state"] = {
+        name: state.get(name) for name in ("Status", "Running", "OOMKilled", "ExitCode")
+    }
+    diagnostics.receipt["server_state"]["Error"] = redact(
+        str(state.get("Error", "")), diagnostics.sensitive
+    )[-4096:]
+    logs = subprocess.run(
+        ["docker", "logs", "--tail", "80", container],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=10,
+    )
+    diagnostics.receipt["server_log_tail"] = redact(
+        logs.stdout + logs.stderr, diagnostics.sensitive
+    )[-12288:]
+    diagnostics.receipt["server_log_exit_code"] = logs.returncode
+    diagnostics.save()
 
 
 def denied(action):
@@ -189,8 +265,11 @@ def main():
     maintenance_password, app_password = secrets.token_urlsafe(48), secrets.token_urlsafe(48)
     sensitive = [maintenance_password, app_password, secret.read_text(encoding="ascii")]
     receipt = {"image": IMAGE, "passed": False, "started_at": datetime.now(UTC).isoformat()}
+    diagnostics = Diagnostics(receipt, reports / "mongodb-check.json", sensitive)
     try:
-        command(["docker", "pull", IMAGE], timeout=600)
+        diagnostics.stage("pull_image")
+        command(["docker", "pull", IMAGE], timeout=600, diagnostics=diagnostics)
+        diagnostics.stage("start_server")
         command(
             [
                 "docker",
@@ -234,21 +313,37 @@ def main():
                 "0.256",
                 "--oplogSize",
                 "128",
-            ]
+            ],
+            diagnostics=diagnostics,
         )
-        wait_shell(container, "if (!db.adminCommand({ping:1}).ok) quit(1);")
+        diagnostics.stage("wait_ping")
+        wait_shell(
+            container, "if (!db.adminCommand({ping:1}).ok) quit(1);", diagnostics=diagnostics
+        )
+        diagnostics.stage("initiate_replica_set")
         shell(
             container,
             f'rs.initiate({{_id:"{REPLICA_SET}",members:[{{_id:0,host:"localhost:27017"}}]}});',
+            diagnostics=diagnostics,
         )
-        wait_shell(container, "if (!db.adminCommand({hello:1}).isWritablePrimary) quit(1);")
+        diagnostics.stage("wait_primary")
+        wait_shell(
+            container,
+            "if (!db.adminCommand({hello:1}).isWritablePrimary) quit(1);",
+            diagnostics=diagnostics,
+        )
+        diagnostics.stage("create_maintenance_identity")
         shell(
             container,
             'db.getSiblingDB("admin").createUser({user:"maintenance",pwd:'
             + json.dumps(maintenance_password)
             + ',roles:["root"]});',
+            diagnostics=diagnostics,
         )
-        info = json.loads(command(["docker", "container", "inspect", container]))[0]
+        diagnostics.stage("inspect_loopback_binding")
+        info = json.loads(
+            command(["docker", "container", "inspect", container], diagnostics=diagnostics)
+        )[0]
         bindings = info["NetworkSettings"]["Ports"]["27017/tcp"]
         if len(bindings) != 1 or bindings[0]["HostIp"] != "127.0.0.1":
             raise RuntimeError("MongoDB host port is not exclusively loopback")
@@ -264,14 +359,17 @@ def main():
                 print("::add-mask::" + value, flush=True)
         from pymongo import MongoClient
 
+        diagnostics.stage("verify_server_version")
         with MongoClient(uri, serverSelectionTimeoutMS=5000, socketTimeoutMS=10000) as client:
             build = client.admin.command("buildInfo")
             if build["version"] != "8.0.34":
                 raise RuntimeError("Pinned MongoDB server version mismatch")
             receipt["server_version"] = build["version"]
+            diagnostics.stage("application_privilege_contract")
             receipt["application_contract"] = application_contract(
                 client, address, app_password, attempt
             )
+        diagnostics.stage("real_pytest_contract")
         junit = reports / "mongodb-tests.xml"
         result = subprocess.run(
             [
@@ -301,8 +399,14 @@ def main():
             raise RuntimeError("Real MongoDB pytest contract failed; inspect sanitized reports")
         receipt["real_tests_passed"] = verify_junit(junit)
         receipt["passed"] = True
+        diagnostics.stage("contracts_passed")
     except Exception as exc:
         receipt["error_type"] = type(exc).__name__
+        receipt["failed_stage"] = receipt.get("stage", "initialization")
+        try:
+            capture_server_diagnostics(container, attempt, diagnostics)
+        except Exception as diagnostic_error:
+            receipt["diagnostic_error_type"] = type(diagnostic_error).__name__
         raise RuntimeError("MongoDB gate failed; inspect the sanitized receipt") from None
     finally:
         try:
