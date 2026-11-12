@@ -1,0 +1,6 @@
+# Test-only wheels; CPython3.13 Windows amd64 / Linux glibc x86_64.
+hypothesis==6.170.15 \
+    --hash=sha256:f25261d1656f830a78863844be5fb55cd0208154dc9ddec85d44fe691488c557 \
+    --hash=sha256:1f7ede44b875dddd8f3e7562e6702c363e82c6fb680b0fe079536bae662987f8
+sortedcontainers==2.4.0 \
+    --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0

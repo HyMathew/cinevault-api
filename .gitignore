@@ -14,3 +14,5 @@ enterprise.json
 .venv-quality/
 .ruff_cache/
 reports/
+.hypothesis/
+.property-quality/
