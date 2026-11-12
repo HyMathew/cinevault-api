@@ -3,7 +3,7 @@
 import copy
 import uuid
 
-from .authentication import authenticated
+from .authentication import authenticated, authenticated_query
 from .catalogue_model import copy_data, etag, movie_data, resource
 from .results import ServiceResult, failure
 
@@ -33,13 +33,14 @@ class CatalogueService:
     def __init__(self, persistence):
         self._persistence = persistence
 
-    def _manage(self, token, timestamp, operation):
+    def _manage(self, token, timestamp, operation, *, read_only=False):
         def authorized(work, user, session):
             if user["role"] not in ("manager", "admin"):
                 return failure(403, "forbidden", "Accès interdit.")
             return operation(work)
 
-        return authenticated(self._persistence, token, timestamp, authorized)
+        execute = authenticated_query if read_only else authenticated
+        return execute(self._persistence, token, timestamp, authorized)
 
     def authorize(self, token, *, identity=None, if_match=None, timestamp):
         """Check before external metadata I/O; the final command checks again."""
@@ -56,7 +57,7 @@ class CatalogueService:
                     return problem
             return ServiceResult(204)
 
-        return self._manage(token, timestamp, authorize)
+        return self._manage(token, timestamp, authorize, read_only=True)
 
     def create(self, token, attributes, *, initial_copy=None, timestamp):
         attributes = copy.deepcopy(movie_data(attributes))

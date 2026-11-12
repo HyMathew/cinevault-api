@@ -1,9 +1,10 @@
 # Unité de travail MongoDB — lot ciblé
 
-État : fondation implémentée pour les ports comptes, sessions et catalogue de
+État : fondation implémentée pour les ports comptes, sessions, tentatives,
+catalogue, reçus, collections privées et événements de
 [contracts.py](../app/persistence/contracts.py), sans activation de routes REST.
-Ce lot ne constitue pas un backend Enterprise complet : circulation, listes
-privées, admission, audit, reçus et outils de migration restent des lots suivants.
+Ce lot ne constitue pas un backend Enterprise complet : circulation, admission,
+cache, administration des comptes et outils de migration restent des lots suivants.
 Aucune double écriture ni aucun repli vers JSON n'est introduit.
 
 ## Utilisation et frontières

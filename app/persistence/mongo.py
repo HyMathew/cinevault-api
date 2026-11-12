@@ -13,6 +13,8 @@ from .mongo_repositories import (
     MongoAccounts,
     MongoAttempts,
     MongoCatalogue,
+    MongoEvents,
+    MongoPersonal,
     MongoReceipts,
     MongoSessions,
     _MongoScope,
@@ -28,6 +30,18 @@ class _MongoWork:
         self._attempts = MongoAttempts(scope)
         self._catalogue = MongoCatalogue(scope)
         self._receipts = MongoReceipts(scope)
+        self._personal = MongoPersonal(scope)
+        self._events = MongoEvents(scope)
+
+    @property
+    def personal(self) -> MongoPersonal:
+        self._scope.check()
+        return self._personal
+
+    @property
+    def events(self) -> MongoEvents:
+        self._scope.check()
+        return self._events
 
     @property
     def revision(self) -> int:

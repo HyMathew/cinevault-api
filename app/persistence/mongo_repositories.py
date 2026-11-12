@@ -10,6 +10,7 @@ from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from ..auth_storage import USERNAME
 from ..catalogue_query import MovieQuery
+from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import _valid_uuid, empty_document, validate_document
 from .contracts import Record
 from .mongo_model import INT64_MAX, collection_name, decode_record, encode_record
@@ -44,6 +45,8 @@ class _MongoScope:
                 "copies",
                 "auth_attempts",
                 "idempotency_records",
+                "collections",
+                "audit_events",
             )
         }
         self._deleted = {name: set() for name in ("movies", "copies")}
@@ -109,7 +112,19 @@ class _MongoScope:
                 document = empty_document()
                 document["revision"] = self._revision
                 document[name] = [record]
-                if name in ("sessions", "idempotency_records"):
+                if name == "collections":
+                    parent = self.find("users", {"_id": record["owner_id"]})
+                    movie = self.find("movies", {"_id": record["movie_id"]})
+                    if parent is not None:
+                        document["users"] = [decode_record("users", parent)]
+                    if movie is not None:
+                        document["movies"] = [decode_record("movies", movie)]
+                elif name == "audit_events":
+                    if record["actor_id"] is not None:
+                        parent = self.find("users", {"_id": record["actor_id"]})
+                        if parent is not None:
+                            document["users"] = [decode_record("users", parent)]
+                elif name in ("sessions", "idempotency_records"):
                     parent_id = record["user_id"] if name == "sessions" else record["actor_id"]
                     parent = self.find("users", {"_id": parent_id})
                     if parent is not None:
@@ -372,7 +387,150 @@ class MongoReceipts(_Repository):
         self._insert("idempotency_records", receipt)
 
 
+class MongoPersonal(_Repository):
+    def get_owned(self, owner_id: str, identity: str) -> Record | None:
+        self._scope.check()
+        _identity(owner_id)
+        _identity(identity)
+        row = self._scope.find("collections", {"_id": identity, "owner_id": owner_id})
+        return decode_record("collections", row) if row is not None else None
+
+    def page(self, owner_id: str, query: PersonalQuery) -> tuple[list[Record], int]:
+        self._scope.check()
+        _identity(owner_id)
+        if type(query) is not PersonalQuery:
+            raise ValueError("A canonical personal query is required")
+        selector = {"owner_id": owner_id}
+        if query.kind:
+            selector["kind"] = query.kind
+        if query.name_key:
+            selector["list_name_key"] = query.name_key
+        collection = self._scope.collection("collections")
+        total = collection.count_documents(selector, session=self._scope._session)
+        with (
+            collection.find(selector, session=self._scope._session)
+            .sort([("created_at", -1), ("_id", -1)])
+            .skip(query.offset)
+            .limit(query.limit) as cursor
+        ):
+            return [decode_record("collections", row) for row in cursor], int(total)
+
+    def has_duplicate(self, entry: Record, *, excluded_id: str | None = None) -> bool:
+        self._scope.check()
+        _identity(entry["owner_id"])
+        _identity(entry["movie_id"])
+        if not isinstance(entry.get("list_name"), str) or not isinstance(entry.get("kind"), str):
+            raise ValueError("A canonical collection key is required")
+        selector = {name: entry[name] for name in ("owner_id", "movie_id", "kind")}
+        selector["list_name_key"] = entry["list_name"].casefold()
+        if excluded_id is not None:
+            _identity(excluded_id)
+            selector["_id"] = {"$ne": excluded_id}
+        return self._scope.find("collections", selector, {"_id": 1}) is not None
+
+    def insert(self, entry: Record) -> None:
+        self._insert("collections", entry)
+
+    def save_owned(self, owner_id: str, entry: Record) -> None:
+        self._scope.check(write=True)
+        _identity(owner_id)
+        encoded = encode_record("collections", entry)
+        identity = encoded["_id"]
+        selector = {"_id": identity, "owner_id": owner_id}
+        if (
+            entry["owner_id"] != owner_id
+            or self._scope.find("collections", selector, {"_id": 1}) is None
+        ):
+            raise LookupError("Owned collection identity does not exist")
+        self._scope.registered(identity, "collections")
+        result = self._scope.write(
+            self._scope.collection("collections").replace_one, selector, encoded, upsert=False
+        )
+        if result.matched_count != 1:
+            raise LookupError("Owned collection identity does not exist")
+        self._scope._dirty["collections"].add(identity)
+
+    def delete_owned(self, owner_id: str, identity: str) -> bool:
+        self._scope.check(write=True)
+        _identity(owner_id)
+        _identity(identity)
+        selector = {"_id": identity, "owner_id": owner_id}
+        if self._scope.find("collections", selector, {"_id": 1}) is None:
+            return False
+        self._scope.registered(identity, "collections")
+        result = self._scope.write(self._scope.collection("collections").delete_one, selector)
+        if result.deleted_count != 1:
+            raise ValueError("Owned collection deletion is inconsistent")
+        self._scope.release([identity], "collections")
+        return True
+
+
+class MongoEvents(_Repository):
+    def append(self, event: Record) -> None:
+        self._scope.check(write=True)
+        collection = self._scope.collection("audit_events")
+        last = collection.find_one(
+            {}, {"_id": 0, "_ordinal": 1}, sort=[("_ordinal", -1)], session=self._scope._session
+        )
+        ordinal = 1
+        if last is not None:
+            if type(last.get("_ordinal")) is not Int64 or not 1 <= last["_ordinal"] < INT64_MAX:
+                raise ValueError("Audit append ordinal is invalid or exhausted")
+            ordinal = int(last["_ordinal"]) + 1
+        encoded = encode_record("audit_events", event, audit_ordinal=ordinal)
+        self._scope.claim(encoded["_id"], "audit_events")
+        self._scope.write(collection.insert_one, encoded)
+        self._scope._dirty["audit_events"].add(encoded["_id"])
+        excess = collection.count_documents({}, session=self._scope._session) - AUDIT_KEEP
+        if excess > 0:
+            with (
+                collection.find({}, {"_id": 1}, session=self._scope._session)
+                .sort("_ordinal", 1)
+                .limit(excess) as cursor
+            ):
+                while batch := list(islice(cursor, 500)):
+                    identities = [row["_id"] for row in batch]
+                    deleted = self._scope.write(
+                        collection.delete_many, {"_id": {"$in": identities}}
+                    )
+                    if deleted.deleted_count != len(identities):
+                        raise ValueError("Audit retention deletion is inconsistent")
+                    self._scope.release(identities, "audit_events")
+
+    def page(self, limit: int, offset: int) -> tuple[list[Record], int]:
+        self._scope.check()
+        if (
+            type(limit) is not int
+            or not 1 <= limit <= 100
+            or type(offset) is not int
+            or not 0 <= offset <= 10000
+        ):
+            raise ValueError("Invalid audit page")
+        collection = self._scope.collection("audit_events")
+        total = collection.count_documents({}, session=self._scope._session)
+        with (
+            collection.find({}, session=self._scope._session)
+            .sort("_ordinal", -1)
+            .skip(offset)
+            .limit(limit) as cursor
+        ):
+            return [decode_record("audit_events", row) for row in cursor], int(total)
+
+
 class MongoCatalogue(_Repository):
+    def movies_by_ids(self, identities: list[str]) -> list[Record]:
+        self._scope.check()
+        if type(identities) is not list or len(identities) > 100:
+            raise ValueError("Movie page identities must contain at most 100 items")
+        for identity in identities:
+            _identity(identity)
+        if not identities:
+            return []
+        with self._scope.collection("movies").find(
+            {"_id": {"$in": identities}}, session=self._scope._session
+        ) as cursor:
+            return [decode_record("movies", row) for row in cursor]
+
     def copies(self, movie_id: str | None = None) -> list[Record]:
         self._scope.check()
         if movie_id is not None:

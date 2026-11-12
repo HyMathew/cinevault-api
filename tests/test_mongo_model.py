@@ -190,6 +190,31 @@ def test_movie_search_keys_are_canonical_reserved_hidden_and_checked_on_decode()
     assert schema["properties"]["genre_keys"]["items"]["maxLength"] >= 240
 
 
+def test_audit_ordinal_is_explicit_positive_reserved_and_hidden():
+    value = {
+        "id": USER_ID,
+        "actor_id": MOVIE_ID,
+        "entity_type": "collection",
+        "entity_id": MOVIE_ID,
+        "action": "collection.created",
+        "timestamp": 0,
+    }
+    boundary = model()
+    with pytest.raises(ValueError):
+        boundary.encode_record("audit_events", value)
+    for bad in (0, -1, True, 2**63):
+        with pytest.raises(ValueError):
+            boundary.encode_record("audit_events", value, audit_ordinal=bad)
+    encoded = boundary.encode_record("audit_events", value, audit_ordinal=1)
+    assert type(encoded["_ordinal"]) is Int64
+    assert boundary.decode_record("audit_events", encoded) == value
+    with pytest.raises(ValueError):
+        boundary.encode_record("audit_events", {**value, "_ordinal": 1}, audit_ordinal=1)
+    without = {k: v for k, v in encoded.items() if k != "_ordinal"}
+    with pytest.raises(ValueError):
+        boundary.decode_record("audit_events", without)
+
+
 def test_native_schemas_cover_every_entity_and_rename_only_root_identity():
     boundary = model()
     schemas = boundary.collection_schemas()
@@ -218,9 +243,18 @@ def test_all_related_entities_survive_real_bson_and_existing_domain_validation()
     for name in COLLECTIONS:
         decoded[name] = [
             boundary.decode_record(
-                name, BSON(BSON.encode(boundary.encode_record(name, row))).decode()
+                name,
+                BSON(
+                    BSON.encode(
+                        boundary.encode_record(
+                            name,
+                            row,
+                            **({"audit_ordinal": position + 1} if name == "audit_events" else {}),
+                        )
+                    )
+                ).decode(),
             )
-            for row in source[name]
+            for position, row in enumerate(source[name])
         ]
     assert validate_document(decoded) == source
 
@@ -260,6 +294,11 @@ def test_native_indexes_enforce_conflicting_active_states_not_only_ids():
     entries = specs["collection_entries"][0]
     assert entries["unique"] is True
     assert entries["key"] == [("owner_id", 1), ("movie_id", 1), ("kind", 1), ("list_name_key", 1)]
+    assert specs["audit_events"][0] == {
+        "name": "audit_append_order",
+        "key": [("_ordinal", 1)],
+        "unique": True,
+    }
     assert all("expireAfterSeconds" not in entry for values in specs.values() for entry in values)
 
 

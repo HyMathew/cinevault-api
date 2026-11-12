@@ -13,6 +13,9 @@ parsing ; pour un remplacement, existence et If-Match sont vérifiés avant le c
 puis contrôlés à nouveau au commit. Les identifiants de route incorrects restent
 404 après autorisation ; ils ne deviennent pas des sélecteurs Mongo arbitraires.
 
+Ce précontrôle est désormais [sans écriture d’activité de session](authorization-preflight.md).
+La commande finale conserve le touch et la mutation dans une unique transaction.
+
 Le remplacement et la suppression exigent l’ETag courant : 428 s’il manque,
 412 s’il est périmé. Un historique de prêt, même retourné, bloque la suppression
 avec 409. Aucun historique ni référence n’est purgé pour libérer un exemplaire.

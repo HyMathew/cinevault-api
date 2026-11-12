@@ -101,6 +101,30 @@ def record_failed_attempts(work, existing, keys, timestamp):
         )
 
 
+def _session_identity(work, digest, timestamp):
+    session = work.sessions.by_token_hash(digest)
+    user = work.accounts.get(session["user_id"]) if session is not None else None
+    if not session_is_current(session, user, timestamp):
+        raise InvalidSession()
+    return user, session
+
+
+def authenticated_query(persistence, token, timestamp, operation):
+    """Preflight authority only: same identity policy, no session activity or write."""
+    digest = token_digest(token)
+    if digest is None:
+        return unauthorized()
+
+    def read(work):
+        user, session = _session_identity(work, digest, timestamp)
+        return operation(work, user, session)
+
+    try:
+        return persistence.query(read)
+    except InvalidSession:
+        return unauthorized()
+
+
 def authenticated(persistence, token, timestamp, operation):
     """Read authority and touch the session in the same UoW as its business operation."""
     digest = token_digest(token)
@@ -108,10 +132,7 @@ def authenticated(persistence, token, timestamp, operation):
         return unauthorized()
 
     def command(work):
-        session = work.sessions.by_token_hash(digest)
-        user = work.accounts.get(session["user_id"]) if session is not None else None
-        if not session_is_current(session, user, timestamp):
-            raise InvalidSession()
+        user, session = _session_identity(work, digest, timestamp)
         work.sessions.touch(session["id"], timestamp)
         return operation(work, user, session)
 

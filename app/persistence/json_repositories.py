@@ -7,6 +7,7 @@ from threading import get_ident
 
 from ..auth_storage import USERNAME
 from ..catalogue_query import MovieQuery, movie_keys
+from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import COLLECTIONS, _valid_uuid
 from .contracts import Record
 
@@ -271,7 +272,91 @@ class JsonReceipts(_Repository):
         self._insert("idempotency_records", receipt)
 
 
+class JsonPersonal(_Repository):
+    def get_owned(self, owner_id: str, identity: str) -> Record | None:
+        self._scope.check()
+        _identity(owner_id)
+        item = self._get("collections", identity)
+        return item if item is not None and item["owner_id"] == owner_id else None
+
+    def page(self, owner_id: str, query: PersonalQuery) -> tuple[list[Record], int]:
+        self._scope.check()
+        _identity(owner_id)
+        if type(query) is not PersonalQuery:
+            raise ValueError("A canonical personal query is required")
+        rows = [
+            item
+            for item in self._scope.rows("collections")
+            if item["owner_id"] == owner_id
+            and (not query.kind or item["kind"] == query.kind)
+            and (not query.name_key or item["list_name"].casefold() == query.name_key)
+        ]
+        rows.sort(key=lambda item: (item["created_at"], item["id"]), reverse=True)
+        return copy.deepcopy(rows[query.offset : query.offset + query.limit]), len(rows)
+
+    def has_duplicate(self, entry: Record, *, excluded_id: str | None = None) -> bool:
+        self._scope.check()
+        _identity(entry["owner_id"])
+        _identity(entry["movie_id"])
+        if excluded_id is not None:
+            _identity(excluded_id)
+        if not isinstance(entry.get("list_name"), str) or not isinstance(entry.get("kind"), str):
+            raise ValueError("A canonical collection key is required")
+        return any(
+            row["id"] != excluded_id
+            and all(row[key] == entry[key] for key in ("owner_id", "movie_id", "kind"))
+            and row["list_name"].casefold() == entry["list_name"].casefold()
+            for row in self._scope.rows("collections")
+        )
+
+    def insert(self, entry: Record) -> None:
+        self._insert("collections", entry)
+
+    def save_owned(self, owner_id: str, entry: Record) -> None:
+        self._scope.check(write=True)
+        _identity(owner_id)
+        if entry.get("owner_id") != owner_id or self.get_owned(owner_id, entry["id"]) is None:
+            raise LookupError("Owned collection identity does not exist")
+        self._save("collections", entry)
+
+    def delete_owned(self, owner_id: str, identity: str) -> bool:
+        self._scope.check(write=True)
+        return (
+            self._delete("collections", identity)
+            if self.get_owned(owner_id, identity) is not None
+            else False
+        )
+
+
+class JsonEvents(_Repository):
+    def append(self, event: Record) -> None:
+        self._insert("audit_events", event)
+        rows = self._scope.rows("audit_events", write=True)
+        rows[:] = rows[-AUDIT_KEEP:]
+
+    def page(self, limit: int, offset: int) -> tuple[list[Record], int]:
+        self._scope.check()
+        if (
+            type(limit) is not int
+            or not 1 <= limit <= 100
+            or type(offset) is not int
+            or not 0 <= offset <= 10000
+        ):
+            raise ValueError("Invalid audit page")
+        rows = self._scope.rows("audit_events")
+        return copy.deepcopy(list(reversed(rows))[offset : offset + limit]), len(rows)
+
+
 class JsonCatalogue(_Repository):
+    def movies_by_ids(self, identities: list[str]) -> list[Record]:
+        self._scope.check()
+        if type(identities) is not list or len(identities) > 100:
+            raise ValueError("Movie page identities must contain at most 100 items")
+        for identity in identities:
+            _identity(identity)
+        selected = set(identities)
+        return copy.deepcopy([row for row in self._scope.rows("movies") if row["id"] in selected])
+
     def copies(self, movie_id: str | None = None) -> list[Record]:
         self._scope.check()
         if movie_id is not None:

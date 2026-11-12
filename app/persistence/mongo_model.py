@@ -94,16 +94,22 @@ def _convert(value, *, encode):
     raise ValueError("Unsupported persistence value")
 
 
-def encode_record(name, record):
+def encode_record(name, record, *, audit_ordinal=None):
     """Create a BSON-safe copy without changing domain values or password hashes."""
     identity = _identity_field(name)
     if type(record) is not dict or identity not in record:
         raise ValueError("Missing persistence identity")
-    if {"_id", "list_name_key", *MOVIE_KEYS}.intersection(record):
+    if {"_id", "_ordinal", "list_name_key", *MOVIE_KEYS}.intersection(record):
         raise ValueError("Reserved persistence field")
     _validate_identity(name, record[identity])
     result = _convert(record, encode=True)
     result["_id"] = result.pop(identity)
+    if name == "audit_events":
+        if type(audit_ordinal) is not int or not 1 <= audit_ordinal <= INT64_MAX:
+            raise ValueError("Audit encoding requires an explicit positive Int64 ordinal")
+        result["_ordinal"] = Int64(audit_ordinal)
+    elif audit_ordinal is not None:
+        raise ValueError("Only audit events have append ordinals")
     if name == "collections":
         if type(result.get("list_name")) is not str:
             raise ValueError("Invalid collection name")
@@ -121,6 +127,12 @@ def decode_record(name, record):
     _validate_identity(name, record["_id"])
     result = _convert(record, encode=False)
     result[identity] = result.pop("_id")
+    if name == "audit_events":
+        if type(record.get("_ordinal")) is not Int64 or not 1 <= record["_ordinal"] <= INT64_MAX:
+            raise ValueError("Invalid stored audit ordinal")
+        result.pop("_ordinal")
+    elif "_ordinal" in result:
+        raise ValueError("Unexpected stored audit ordinal")
     if name == "movies":
         expected = movie_keys(result)
         if any(key not in result or result[key] != value for key, value in expected.items()):
@@ -244,6 +256,12 @@ def collection_schemas(source=None):
         }
     )
     schemas["movies"]["required"].extend(sorted(MOVIE_KEYS))
+    schemas["audit_events"]["properties"]["_ordinal"] = {
+        "bsonType": "long",
+        "minimum": 1,
+        "maximum": INT64_MAX,
+    }
+    schemas["audit_events"]["required"].append("_ordinal")
     return schemas
 
 
@@ -305,7 +323,7 @@ def collection_indexes():
         index("receipt_expiration", ["expires_at"]),
     ]
     result["audit_events"] = [
-        index("audit_order", ["timestamp", "_id"]),
+        index("audit_append_order", ["_ordinal"], unique=True),
         index("entity_audit", ["entity_type", "entity_id", "timestamp"]),
     ]
     return result

@@ -5,7 +5,7 @@ import uuid
 
 from ..receipt_storage import digest
 from ..validation import ValidationError, is_unicode
-from .authentication import authenticated
+from .authentication import authenticated, authenticated_query
 from .catalogue import canonical_identity, missing, version_problem
 from .catalogue_model import COPY_FIELDS, copy_data, etag, resource
 from .receipts import RECEIPT_CAPACITY, RECEIPT_TTL, cached_problem, key_digest
@@ -16,13 +16,14 @@ class CopyService:
     def __init__(self, persistence):
         self._persistence = persistence
 
-    def _manage(self, token, timestamp, operation):
+    def _manage(self, token, timestamp, operation, *, read_only=False):
         def authorized(work, user, session):
             if user["role"] not in ("manager", "admin"):
                 return failure(403, "forbidden", "Accès interdit.")
             return operation(work, user)
 
-        return authenticated(self._persistence, token, timestamp, authorized)
+        execute = authenticated_query if read_only else authenticated
+        return execute(self._persistence, token, timestamp, authorized)
 
     @staticmethod
     def _current(work, identity, if_match):
@@ -41,7 +42,7 @@ class CopyService:
                     return problem
             return ServiceResult(204)
 
-        return self._manage(token, timestamp, authorize)
+        return self._manage(token, timestamp, authorize, read_only=True)
 
     def create(self, token, data, *, key=None, timestamp):
         data = copy.deepcopy(data)

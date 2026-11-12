@@ -213,6 +213,7 @@ def application_contract(client, address, password, attempt):
     class PublicReadTrace(CommandListener):
         def __init__(self):
             self.operations = []
+            self.private_scopes = []
 
         def started(self, event):
             if event.command_name in (
@@ -224,6 +225,32 @@ def application_contract(client, address, password, attempt):
                 "findAndModify",
             ):
                 self.operations.append((event.command_name, event.command.get(event.command_name)))
+                collection = event.command.get(event.command_name)
+                if event.command_name == "find":
+                    selectors = [event.command.get("filter", {})]
+                elif event.command_name == "aggregate":
+                    pipeline = event.command.get("pipeline", [])
+                    selectors = [pipeline[0].get("$match", {}) if pipeline else {}]
+                elif event.command_name in ("update", "delete"):
+                    selectors = [
+                        item.get("q", {})
+                        for item in event.command.get(event.command_name + "s", [])
+                    ]
+                else:
+                    selectors = [{}]
+                for selector in selectors:
+                    owner = selector.get("owner_id")
+                    identity = selector.get("_id")
+                    ids = identity.get("$in") if isinstance(identity, dict) else None
+                    self.private_scopes.append(
+                        (
+                            event.command_name,
+                            collection,
+                            isinstance(owner, str),
+                            isinstance(identity, str),
+                            len(ids) if isinstance(ids, list) else None,
+                        )
+                    )
             if event.command_name == "aggregate":
                 for stage in event.command.get("pipeline", []):
                     if "$out" in stage or "$merge" in stage:
@@ -287,6 +314,12 @@ def application_contract(client, address, password, attempt):
             ("test_authentication_service.py", "exercise_auth_service", "authentication_service"),
             ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
             ("test_copy_service.py", "exercise_copy_service", "copy_service"),
+            ("test_personal_service.py", "exercise_personal_service", "personal_service"),
+            (
+                "test_readonly_authorization.py",
+                "exercise_readonly_authorization",
+                "readonly_authorization",
+            ),
             (
                 "test_public_catalogue_service.py",
                 "exercise_public_catalogue_service",
@@ -298,7 +331,12 @@ def application_contract(client, address, password, attempt):
             )
             service_contract = importlib.util.module_from_spec(service_spec)
             service_spec.loader.exec_module(service_contract)
-            arguments = {"observer": trace.operations} if key == "public_catalogue_service" else {}
+            if key in ("public_catalogue_service", "readonly_authorization"):
+                arguments = {"observer": trace.operations}
+            elif key == "personal_service":
+                arguments = {"scope_observer": trace.private_scopes}
+            else:
+                arguments = {}
             result[key] = getattr(service_contract, function)(app[name], **arguments)
         denied(lambda: app[name].users.create_index("display_name"))
         denied(lambda: app[name].command("createUser", "forbidden", pwd="unused", roles=[]))

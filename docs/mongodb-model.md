@@ -10,6 +10,12 @@ Le nouveau validateur impose ces clés ; une ancienne base Mongo nécessite une
 migration explicite. `provision` refuse sa divergence sans collMod ou réparation.
 Les preuves datées ci-dessous portant sur22index restent celles de l’ancien lot.
 
+Le [lot collections/audit C3](personal-service.md) ajoute un ordinal BSON Int64
+explicite aux événements et remplace leur index timestamp/UUID par un index
+unique d’ordre d’append. Le total reste25index ; une ancienne base sans ordinal
+nécessite également une migration explicite. Les preuves C2c ne démontrent pas
+ce nouveau validateur ni sa rétention transactionnelle.
+
 ## Représentation
 
 Un document MongoDB correspond à une entité. Son `_id` est l'UUID canonique public,

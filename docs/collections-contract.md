@@ -1,5 +1,10 @@
 # Collections personnelles
 
+Les routes utilisent désormais le [service et les ports communs C3](personal-service.md),
+avec JSON encore sélectionné dans la composition HTTP. L’admission équitable de
+capacité reste un chantier ouvert ; cette extraction ne clôt pas le constat de
+plafond partagé des collections.
+
 Une entrée appartient à son créateur ; le client ne fournit jamais `owner_id`. Même un administrateur ne lit ni ne modifie les collections d'un autre compte par ces routes. Une entrée étrangère reçoit 404. Rôles membre, gestionnaire et administrateur possèdent chacun leur espace privé.
 
 `GET /api/v1/collections` liste uniquement les entrées du compte courant, avec filtres facultatifs `kind` et `list_name`, pagination `limit` 1–100 (24 par défaut) et `offset` 0–10000. Réponse `{entries,movies,total,limit,offset}` ; `movies` associe les IDs référencés dans la page aux métadonnées publiques des films, sans requête supplémentaire par entrée. Chaque entrée possède id, owner_id, movie_id, kind, list_name, supports, created_at et `_etag` dérivé de ses attributs persistés.

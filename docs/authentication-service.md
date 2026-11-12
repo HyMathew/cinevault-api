@@ -1,5 +1,9 @@
 # Noyau d’authentification partagé
 
+Les précontrôles des trois domaines utilisent désormais une [autorité en lecture
+seule](authorization-preflight.md), avec le même chargement session/compte et la
+même politique temporelle que la commande finale, sans prolonger la session.
+
 `app/services/authentication.py` porte désormais la connexion, la lecture et la
 modification de son profil, le changement de mot de passe et la déconnexion. Il
 ne dépend ni de Flask ni de PyMongo : il reçoit la persistance et le hasher, et
