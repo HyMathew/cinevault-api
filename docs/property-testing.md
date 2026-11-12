@@ -107,6 +107,7 @@ applicatif et `tests/` dans `sys.path`, l'entrée est :
 
 ```python
 from properties.native import exercise_corpus
+
 result = exercise_corpus(database, corpus)
 ```
 
