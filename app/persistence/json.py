@@ -1,11 +1,13 @@
 """Explicit JSON unit of work over the existing atomic, fully validated store."""
 
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 from ..storage_v2 import V2Store
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
+from .json_circulation import JsonCirculation
 from .json_repositories import (
     JsonAccounts,
     JsonAttempts,
@@ -29,6 +31,12 @@ class _JsonWork:
         self._receipts = JsonReceipts(self._scope)
         self._personal = JsonPersonal(self._scope)
         self._events = JsonEvents(self._scope)
+        self._circulation = JsonCirculation(self._scope)
+
+    @property
+    def circulation(self) -> JsonCirculation:
+        self._scope.check()
+        return self._circulation
 
     @property
     def personal(self) -> JsonPersonal:
@@ -101,3 +109,13 @@ class JsonPersistence:
 
     def readiness(self) -> None:
         self.query(lambda work: None)
+
+
+@contextmanager
+def document_work(document):
+    """Bridge an owned legacy transaction without opening another file or UoW."""
+    work = _JsonWork(document, writable=True)
+    try:
+        yield work
+    finally:
+        work._close()

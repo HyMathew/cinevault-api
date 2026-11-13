@@ -16,6 +16,12 @@ unique d’ordre d’append. Le total reste25index ; une ancienne base sans ordi
 nécessite également une migration explicite. Les preuves C2c ne démontrent pas
 ce nouveau validateur ni sa rétention transactionnelle.
 
+Le [service circulation C4](circulation-service.md) étend les reçus aux créations
+de prêts/réservations et ajoute trois index de tri sans statut :28index déclarés
+au total. Les chiffres25 ci-dessus désignent les lots antérieurs ; la qualification
+native C4 doit porter sur ses propres sources et validateurs, sans réutiliser une
+preuve C3 comme preuve de ce changement.
+
 ## Représentation
 
 Un document MongoDB correspond à une entité. Son `_id` est l'UUID canonique public,

@@ -1,5 +1,12 @@
 # Réservations réalisées
 
+Le [service commun de circulation C4](circulation-service.md) conserve ces règles
+sur JSON/Mongo et documente les reçus optionnels des créations, les refus métier
+qui peuvent committer l’expiration et les exceptions qui annulent toute l’UoW.
+Évolution explicite de v2 : les nouvelles expirations groupées suivent sequence
+croissante dans les deux moteurs, même si un ancien snapshot JSON a été réordonné.
+Les événements antérieurs restent dans leur ordre sous la rétention déclarée2000.
+
 Une attente est créée pour le compte authentifié seulement lorsqu'aucun exemplaire libre ne reste hors réservations. Une réservation par compte/film, dix attentes maximum ; quatorze jours avant expiration. L'ordre utilise une séquence affectée sous le verrou du document, sans ambiguïté pour deux demandes dans la même seconde.
 
 Routes : POST/GET `/api/v1/reservations`, GET `/api/v1/reservations/{id}`, POST `/api/v1/reservations/{id}/cancel` avec If-Match. La liste accepte `status`, `movie_id`, `scope`, `limit`, `offset`. `scope=all` exige manager/admin ; `mine` est accessible à chaque rôle. Les membres voient leurs seules identités, positions et demandes associées ; aucun nom du reste de la file n'est envoyé.

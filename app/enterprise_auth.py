@@ -10,9 +10,16 @@ from pathlib import Path
 import portalocker
 from argon2 import PasswordHasher
 from flask import Blueprint, current_app, g, jsonify, request
-from werkzeug.exceptions import BadRequest, ServiceUnavailable, UnsupportedMediaType
+from werkzeug.exceptions import (
+    BadRequest,
+    RequestEntityTooLarge,
+    ServiceUnavailable,
+    UnsupportedMediaType,
+)
 
+from .circulation_model import PayloadError, RequestBody
 from .client_context import InvalidClientContext, client_address, install_client_context
+from .persistence.errors import CommitOutcomeUnknown, TransactionUnavailable
 from .persistence.json import JsonPersistence
 from .registration_admission import RegistrationAdmission, RegistrationBusy
 from .repository import unique_pairs
@@ -59,6 +66,14 @@ def payload(required, optional=()):
     ):
         raise ValidationError({"body": "Champs invalides."})
     return value
+
+
+def capture_body():
+    """Defer transport rejection until its historical authorization/payload point."""
+    try:
+        return RequestBody(request.get_data(), request.is_json)
+    except (BadRequest, RequestEntityTooLarge) as exc:
+        return RequestBody(b"", request.is_json, error=exc.code)
 
 
 def transact(operation):
@@ -219,6 +234,22 @@ def authentication_service():
 def run_service(operation):
     try:
         result = operation()
+    except PayloadError as exc:
+        if exc.status == 415:
+            raise UnsupportedMediaType() from None
+        if exc.status == 413:
+            raise RequestEntityTooLarge() from None
+        raise BadRequest("JSON invalide.") from None
+    except CommitOutcomeUnknown:
+        current_app.logger.error("Commit Enterprise : issue inconnue")
+        response, status = error(
+            503, "commit_unknown", "Résultat incertain. Vérifiez l’état avant de réessayer."
+        )
+        response.status_code = status
+        return response
+    except TransactionUnavailable:
+        current_app.logger.error("Transaction Enterprise indisponible")
+        raise ServiceUnavailable("Stockage indisponible.") from None
     except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
         current_app.logger.error("Stockage Enterprise indisponible : %s", type(exc).__name__)
         raise ServiceUnavailable("Stockage indisponible.") from exc
@@ -316,6 +347,8 @@ def get_user(user_id):
 
 @bp.patch("/users/<user_id>")
 def update_user(user_id):
+    timestamp, namespace = now(), uuid.uuid4()
+
     def update(doc, user, session):
         if user["role"] != "admin":
             return forbidden()
@@ -347,7 +380,7 @@ def update_user(user_id):
         if not target["enabled"]:
             from .reservation_service import cancel_disabled
 
-            cancel_disabled(doc, target["id"], user["id"], now())
+            cancel_disabled(doc, target["id"], user["id"], timestamp, namespace=namespace)
         if changed:
             doc["sessions"][:] = [s for s in doc["sessions"] if s["user_id"] != target["id"]]
         return jsonify(public_profile(target)), 200

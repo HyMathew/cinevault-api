@@ -10,4 +10,11 @@ La réponse mémorisée est limitée par un validateur strict aux attributs publ
 
 Le formulaire conserve ses valeurs et sa clé lorsqu'une indisponibilité laisse le résultat incertain ; aucun retry automatique. Une tentative modifiant les données avec la même clé exige de vérifier le résultat puis d'ouvrir un nouveau formulaire. Le service reconstruit Location depuis l'identifiant et le routage Flask courant ; aucune URL arbitraire n'est mémorisée.
 
-L'import `POST /api/v1/catalogue/import` utilise le même mécanisme avec clé obligatoire, opération `catalog.import` et statut 200. Son reçu contient seulement un identifiant d'opération et quatre compteurs bornés ; le contenu du fichier n'est pas conservé dans le reçu. La clé est commune aux opérations d'un acteur : la réutiliser pour un autre type d'opération reçoit 409. Les autres créations ne disposent pas encore de ce mécanisme ; aucun reçu de connexion n'est autorisé.
+L'import `POST /api/v1/catalogue/import` utilise le même mécanisme avec clé obligatoire, opération `catalog.import` et statut 200. Son reçu contient seulement un identifiant d'opération et quatre compteurs bornés ; le contenu du fichier n'est pas conservé dans le reçu. La clé est commune aux opérations d'un acteur : la réutiliser pour un autre type d'opération reçoit 409. Aucun reçu de connexion n'est autorisé.
+
+Le [service de circulation C4](circulation-service.md) ajoute les créations de prêt
+(`loan.request`) et réservation (`reservation.create`), avec clé **optionnelle**,
+succès201 et même namespace acteur-clé/TTL24h/budget10000. Le reçu garde leur réponse
+publique initiale stricte, y compris ETag ; après une transition, le rejeu rend ce
+snapshot initial et Location permet de consulter l’état courant. Approve, return
+et cancel ne possèdent pas de reçu : ETag et réconciliation après503 restent requis.

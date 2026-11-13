@@ -214,6 +214,7 @@ def application_contract(client, address, password, attempt):
         def __init__(self):
             self.operations = []
             self.private_scopes = []
+            self.circulation_scopes = []
 
         def started(self, event):
             if event.command_name in (
@@ -251,6 +252,36 @@ def application_contract(client, address, password, attempt):
                             len(ids) if isinstance(ids, list) else None,
                         )
                     )
+                    pipeline = event.command.get("pipeline", [])
+                    limit = event.command.get("limit")
+                    if not limit:
+                        limit = next(
+                            (stage["$limit"] for stage in pipeline if "$limit" in stage), None
+                        )
+                    if not limit and any(
+                        "$count" in stage or "$group" in stage for stage in pipeline
+                    ):
+                        limit = "count"
+                    self.circulation_scopes.append(
+                        (
+                            event.command_name,
+                            collection,
+                            any(
+                                isinstance(selector.get(key), str)
+                                for key in ("borrower_id", "user_id", "owner_id")
+                            ),
+                            isinstance(selector.get("movie_id"), str),
+                            any(
+                                isinstance(selector.get(key), str)
+                                for key in ("_id", "copy_id", "loan_id")
+                            ),
+                            len(ids) if isinstance(ids, list) else None,
+                            len(selector["$or"]) if isinstance(selector.get("$or"), list) else None,
+                            limit,
+                            selector.get("status") == "waiting"
+                            and isinstance(selector.get("expires_at"), dict),
+                        )
+                    )
             if event.command_name == "aggregate":
                 for stage in event.command.get("pipeline", []):
                     if "$out" in stage or "$merge" in stage:
@@ -268,6 +299,7 @@ def application_contract(client, address, password, attempt):
 
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root / "tests"))
     from app.persistence.mongo_model import collection_name
     from app.storage_v2 import COLLECTIONS
 
@@ -315,6 +347,7 @@ def application_contract(client, address, password, attempt):
             ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
             ("test_copy_service.py", "exercise_copy_service", "copy_service"),
             ("test_personal_service.py", "exercise_personal_service", "personal_service"),
+            ("test_circulation_service.py", "exercise_circulation_service", "circulation_service"),
             (
                 "test_readonly_authorization.py",
                 "exercise_readonly_authorization",
@@ -335,9 +368,27 @@ def application_contract(client, address, password, attempt):
                 arguments = {"observer": trace.operations}
             elif key == "personal_service":
                 arguments = {"scope_observer": trace.private_scopes}
+            elif key == "circulation_service":
+                arguments = {
+                    "observer": trace.circulation_scopes,
+                    "process_config": {
+                        "backend": "mongodb",
+                        "address": address,
+                        "username": "application",
+                        "password": password,
+                        "database": name,
+                        "options": options,
+                    },
+                }
             else:
                 arguments = {}
             result[key] = getattr(service_contract, function)(app[name], **arguments)
+        circulation = result["circulation_service"]
+        if not (
+            circulation["native_targeted_trace"]["checked"]
+            and circulation["native_process_races"]["checked"]
+        ):
+            raise RuntimeError("Required native circulation trace/process checks were not executed")
         denied(lambda: app[name].users.create_index("display_name"))
         denied(lambda: app[name].command("createUser", "forbidden", pwd="unused", roles=[]))
         denied(lambda: app["other_database"].users.find_one({}))

@@ -302,6 +302,8 @@ def collection_indexes():
             partial={"status": {"$in": ["pending", "active"]}},
         ),
         index("borrower_loans", ["borrower_id", "status", "requested_at", "_id"]),
+        index("loan_time_order", ["requested_at", "_id"]),
+        index("borrower_time_order", ["borrower_id", "requested_at", "_id"]),
         index("movie_loans", ["movie_id", "status", "_id"]),
         index("copy_history", ["copy_id", "_id"]),
     ]
@@ -316,6 +318,7 @@ def collection_indexes():
         index("fulfilled_loan_unique", ["loan_id"], unique=True, partial={"status": "fulfilled"}),
         index("movie_queue", ["movie_id", "status", "sequence"]),
         index("user_reservations", ["user_id", "status", "sequence"]),
+        index("user_reservation_order", ["user_id", "sequence"]),
         index("waiting_expiration", ["status", "expires_at"]),
     ]
     result["idempotency_records"] = [

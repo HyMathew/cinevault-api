@@ -5,6 +5,7 @@ external side effects. This runner does not supply business authorization.
 """
 
 import math
+from random import uniform
 from time import monotonic, sleep
 
 import pymongo
@@ -13,15 +14,9 @@ from pymongo.errors import PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
+from .errors import CommitOutcomeUnknown as CommitOutcomeUnknown
+from .errors import TransactionUnavailable as TransactionUnavailable
 from .execution import ExecutionGuard
-
-
-class TransactionUnavailable(RuntimeError):
-    """No successful transaction result can be returned."""
-
-
-class CommitOutcomeUnknown(TransactionUnavailable):
-    """Commit may have succeeded; resolve via state/idempotency, never blind replay."""
 
 
 class TransactionProtocolError(RuntimeError):
@@ -39,7 +34,7 @@ def _abort(session):
 
 
 class TransactionRunner:
-    def __init__(self, client, *, timeout_seconds=10, max_attempts=3, max_commit_attempts=5):
+    def __init__(self, client, *, timeout_seconds=10, max_attempts=64, max_commit_attempts=5):
         if (
             type(timeout_seconds) not in (int, float)
             or not 0 < timeout_seconds <= 60
@@ -57,13 +52,18 @@ class TransactionRunner:
         self._execution = ExecutionGuard()
 
     @staticmethod
-    def _pause(deadline, *, uncertain=False):
+    def _pause(deadline, *, uncertain=False, body_attempt=None):
         remaining = deadline - monotonic()
         if remaining <= 0:
             if uncertain:
                 raise CommitOutcomeUnknown("MongoDB commit outcome is unknown") from None
             raise TransactionUnavailable("MongoDB transaction deadline exceeded") from None
-        sleep(min(0.02, remaining))
+        # Desynchronize contending bodies without changing same-commit retries.
+        # Saturate the exponent even for an explicitly very large attempt cap.
+        delay = 0.02
+        if body_attempt is not None:
+            delay = uniform(0, min(0.5, 0.02 * 2 ** min(body_attempt, 5)))
+        sleep(min(delay, remaining))
 
     def _commit(self, session, deadline):
         """True means committed; False permits a new complete transaction."""
@@ -118,7 +118,7 @@ class TransactionRunner:
                                 raise
                             if exc.has_error_label("TransientTransactionError"):
                                 if attempt + 1 < self.max_attempts:
-                                    self._pause(deadline)
+                                    self._pause(deadline, body_attempt=attempt)
                                     continue
                             raise TransactionUnavailable(
                                 "MongoDB transaction unavailable"
@@ -128,7 +128,7 @@ class TransactionRunner:
                         if self._commit(session, deadline):
                             return result
                         if attempt + 1 < self.max_attempts:
-                            self._pause(deadline)
+                            self._pause(deadline, body_attempt=attempt)
                     raise TransactionUnavailable("MongoDB transaction retries exhausted") from None
         except PyMongoError:
             # URI, host details, command bodies and driver errors do not cross

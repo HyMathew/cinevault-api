@@ -930,6 +930,86 @@
               "$ref": "#/$defs/import_summary"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "actor_id",
+            "key_hash",
+            "request_hash",
+            "operation",
+            "created_at",
+            "expires_at",
+            "response"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "actor_id": {
+              "$ref": "#/$defs/id"
+            },
+            "key_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "request_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "operation": {
+              "const": "loan.request"
+            },
+            "created_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "response": {
+              "$ref": "#/$defs/cached_loan"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "actor_id",
+            "key_hash",
+            "request_hash",
+            "operation",
+            "created_at",
+            "expires_at",
+            "response"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "actor_id": {
+              "$ref": "#/$defs/id"
+            },
+            "key_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "request_hash": {
+              "$ref": "#/$defs/digest"
+            },
+            "operation": {
+              "const": "reservation.create"
+            },
+            "created_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "expires_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "response": {
+              "$ref": "#/$defs/cached_reservation"
+            }
+          }
         }
       ]
     },
@@ -996,6 +1076,302 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740992
+            }
+          }
+        }
+      ]
+    },
+    "cached_loan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "borrower_id",
+        "copy_id",
+        "status",
+        "requested_at",
+        "approved_at",
+        "due_at",
+        "returned_at",
+        "cancelled_at",
+        "_etag"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "borrower_id": {
+          "$ref": "#/$defs/id"
+        },
+        "copy_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "const": "pending"
+        },
+        "requested_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "approved_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "returned_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cancelled_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "_etag": {
+          "type": "string",
+          "pattern": "^\"[0-9a-f]{64}\"$"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "pending"
+            },
+            "copy_id": {
+              "type": "null"
+            },
+            "approved_at": {
+              "type": "null"
+            },
+            "due_at": {
+              "type": "null"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "active"
+            },
+            "copy_id": {
+              "$ref": "#/$defs/id"
+            },
+            "approved_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "due_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "returned"
+            },
+            "copy_id": {
+              "$ref": "#/$defs/id"
+            },
+            "approved_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "due_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "returned_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "cancelled_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            },
+            "copy_id": {
+              "type": "null"
+            },
+            "approved_at": {
+              "type": "null"
+            },
+            "due_at": {
+              "type": "null"
+            },
+            "returned_at": {
+              "type": "null"
+            },
+            "cancelled_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      ]
+    },
+    "cached_reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "movie_id",
+        "user_id",
+        "status",
+        "sequence",
+        "created_at",
+        "expires_at",
+        "closed_at",
+        "loan_id",
+        "_etag"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "movie_id": {
+          "$ref": "#/$defs/id"
+        },
+        "user_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "const": "waiting"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "closed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loan_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "_etag": {
+          "type": "string",
+          "pattern": "^\"[0-9a-f]{64}\"$"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "waiting"
+            },
+            "closed_at": {
+              "type": "null"
+            },
+            "loan_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "fulfilled"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "cancelled"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "expired"
+            },
+            "closed_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "loan_id": {
+              "type": "null"
             }
           }
         }

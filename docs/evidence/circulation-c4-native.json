@@ -1,0 +1,352 @@
+{
+  "schema": 1,
+  "scope": "Controlled disposable native repository/service qualification; not HTTP Mongo activation, migration, deployment or load benchmark",
+  "started_at_utc": "2026-11-13T07:46:44.709604+00:00",
+  "finished_at_utc": "2026-11-13T07:48:50.423296+00:00",
+  "passed": true,
+  "base_git": "36e82622cf25ad7b3fa37a5059131afd95f34f4b",
+  "source_manifest_sha256": "c95ccdb68b0a1e2b11d1c5773a58afcb3943ec8bc19ba69e0fec3fd1b03b0474",
+  "frozen_overlay_manifest_sha256": "401b4fc80612506237d6432768b03a9c50f1ce58cf3075b5a3e1df0a7d1a2131",
+  "frozen_overlay_sources": [
+    {
+      "path": "app/circulation_model.py",
+      "sha256": "94eb234860f47117337d6b71ef1983164ad322196de1c4ce13bfe31e086ad2d4",
+      "bytes": 4013
+    },
+    {
+      "path": "app/enterprise_auth.py",
+      "sha256": "291915820585601e3690dd3cdfea53ca7ea3b357c70bd4065b0e15f6cca305a6",
+      "bytes": 15629
+    },
+    {
+      "path": "app/enterprise_lending.py",
+      "sha256": "5582538261f4a3498d8d508ad3c0786e35e1b8a21843f216aa5edc8dc0883019",
+      "bytes": 2743
+    },
+    {
+      "path": "app/enterprise_reservations.py",
+      "sha256": "0f6bcf5b70b9ab5d70a771691da574b97a49f9d457ce415453b293841e8a4d6e",
+      "bytes": 1870
+    },
+    {
+      "path": "app/persistence/contracts.py",
+      "sha256": "ba862e76d319d0d8a8c63d70e6629e85a6f90bed18a9e3f6420a8b64cd3a183e",
+      "bytes": 6764
+    },
+    {
+      "path": "app/persistence/errors.py",
+      "sha256": "0bd20a35150a31847e2fd0fc31aed6e85100ff311db4bc213a79af400ec6afae",
+      "bytes": 323
+    },
+    {
+      "path": "app/persistence/json.py",
+      "sha256": "2c86a6ec89581545268d6833f62e33826254dc959d2b1fab28c9df36fdeb381d",
+      "bytes": 3328
+    },
+    {
+      "path": "app/persistence/json_circulation.py",
+      "sha256": "91a6f34ff81c382fa8ecf9903ced1c25d8902083651be74bc7713cb35ec960a7",
+      "bytes": 8034
+    },
+    {
+      "path": "app/persistence/json_repositories.py",
+      "sha256": "6442391f36b024969f7f2158f924c55a741be49f3bf2764800f68f10ec5a6a1f",
+      "bytes": 18344
+    },
+    {
+      "path": "app/persistence/mongo.py",
+      "sha256": "12595451e2cb8af0afd7aa49d82025d0ae557aa2e419171ba39e1a9a21faba74",
+      "bytes": 4199
+    },
+    {
+      "path": "app/persistence/mongo_circulation.py",
+      "sha256": "b0700bbb873b9c895cda471c8d4d1af425dc23e33110fc2f334b3b664c73e1ae",
+      "bytes": 10303
+    },
+    {
+      "path": "app/persistence/mongo_model.py",
+      "sha256": "6cbd81a6e320cefab63a1d74e38187fbd80b070ddfdfe19ff60c975279130b24",
+      "bytes": 12996
+    },
+    {
+      "path": "app/persistence/mongo_repositories.py",
+      "sha256": "11fd175c30b3498d0ff824fa237a3ca0761eb7ded977373e526160596718e8d5",
+      "bytes": 32590
+    },
+    {
+      "path": "app/persistence/mongo_transactions.py",
+      "sha256": "5acbe4752fcfbc854b160253918c59d40ad42474ffa32322e6bfca30e8a3e535",
+      "bytes": 6445
+    },
+    {
+      "path": "app/receipt_storage.py",
+      "sha256": "9c44f2182615f05eb11e7e79410be81fd5872e422017866fd51e71f82a2d42e1",
+      "bytes": 6508
+    },
+    {
+      "path": "app/reservation_service.py",
+      "sha256": "89933396c93cdc0ba7d97f31195a91e1bbdc9d1617209ad3f98a5a2cb72167e5",
+      "bytes": 398
+    },
+    {
+      "path": "app/services/circulation.py",
+      "sha256": "e2bd0bfecb06696e301f6da6e8423a01bc9ca2cf2e3fd04309803f5f746b76fd",
+      "bytes": 23639
+    },
+    {
+      "path": "docs/circulation-service.md",
+      "sha256": "3c3a233e826eb41a3eb0a00be8e5c064753d04c1f83ee78cd6b13a96da6c721a",
+      "bytes": 13742
+    },
+    {
+      "path": "docs/idempotency.md",
+      "sha256": "e43962ad5bd495fb18e65aaa1010bb74f552b4702d0380647db025fe4f962e60",
+      "bytes": 3071
+    },
+    {
+      "path": "docs/mongodb-model.md",
+      "sha256": "ed93a86148498f40c73f4fcf5dcec41fefa325b94c66b40353214cf280364a45",
+      "bytes": 6221
+    },
+    {
+      "path": "docs/openapi-v1.json",
+      "sha256": "2ec4d26c206b299490533bacba12dcede83e0546d6370374a442d6e1a5b25361",
+      "bytes": 155813
+    },
+    {
+      "path": "docs/reservations.md",
+      "sha256": "1a8c5d2492f7bb10190a1e1d6cb90cc147711e22df66ae1eab60f1153f13f04d",
+      "bytes": 3148
+    },
+    {
+      "path": "schemas/catalogue-v2.schema.json",
+      "sha256": "6b7b19e276eeb1f7d605333e701eeb5c15742b66c39547938573ecec0707ac41",
+      "bytes": 31224
+    },
+    {
+      "path": "scripts/check_mongodb.py",
+      "sha256": "cfc87cfa12f67e2fe684587ab2242a2f6911d55cb32978404b4cedab07225856",
+      "bytes": 23776
+    },
+    {
+      "path": "tests/circulation_native.py",
+      "sha256": "291e4f1aa33f0bbb451c760cf577104f94d3994e3e66c0ef02b057e9d3289388",
+      "bytes": 5874
+    },
+    {
+      "path": "tests/circulation_workers.py",
+      "sha256": "63eed9c37e793f163aa6cada9b7cac99d3aa328e8ac2289ad350a75d12027881",
+      "bytes": 5732
+    },
+    {
+      "path": "tests/test_circulation_atomicity.py",
+      "sha256": "91f8779bd2882a93f010686f8535bb04eec567624b2e98e6ceb8441eb54f4eab",
+      "bytes": 5564
+    },
+    {
+      "path": "tests/test_circulation_concurrency.py",
+      "sha256": "0c761578a1bc75e1ef738d9b8201711b0849781ea8de76aae3e862f76785ce15",
+      "bytes": 7615
+    },
+    {
+      "path": "tests/test_circulation_constraints.py",
+      "sha256": "02e7a8a4cc27ce152a77b1e164f3fdd973f514bc4f65f2477ad7e6f0b4f287ea",
+      "bytes": 5945
+    },
+    {
+      "path": "tests/test_circulation_http.py",
+      "sha256": "31b56aefe1c44aa469b4e7186820aff598284fdff304e3bb1e340fa3d658474d",
+      "bytes": 4383
+    },
+    {
+      "path": "tests/test_circulation_integrity.py",
+      "sha256": "e430ace7fbeeb396c91f3571bf23621983a26f86de5e26869bbb398930f4c170",
+      "bytes": 22107
+    },
+    {
+      "path": "tests/test_circulation_model.py",
+      "sha256": "6483c3993c02bd9f57f0fe859f35c307e033be879c163feddeb13d382430253f",
+      "bytes": 2761
+    },
+    {
+      "path": "tests/test_circulation_service.py",
+      "sha256": "ab12dcdf143eddd54c25305511bd030f9d6e0e2f445223d5254c4fb4dc851fe9",
+      "bytes": 11947
+    },
+    {
+      "path": "tests/test_mongo_retry_budget.py",
+      "sha256": "51a886e74cb5596f238940466550473d97aa26ae9bc8f028afee61dd9da8528d",
+      "bytes": 8303
+    }
+  ],
+  "raw_sanitized_native_receipt_sha256": "b37f658446997c7c29577c77d7c56bd112582187785e4d8e5dfb6189049f65dc",
+  "engine": {
+    "version": "8.0.34",
+    "image": "mongo@sha256:1d7a2d487c6465ea022474b90b65d6c91bb600b421b65880d8c6e141d6122200",
+    "network": "none",
+    "public_ports": 0,
+    "replica_members": 1,
+    "physical_high_availability": false
+  },
+  "driver": {
+    "pymongo": "4.19.0",
+    "pure_python_musl": true
+  },
+  "circulation": {
+    "circulation_service": "passed",
+    "fifo_and_receipts": true,
+    "native_targeted_trace": {
+      "checked": true,
+      "commands": 527
+    },
+    "expiration_order_and_exception_rollback": "passed",
+    "actor_key_and_lost_ack_reconciliation": "passed",
+    "targeted_fk_owner_and_closed_scope": "passed",
+    "abort_replay_with_additional_expiration_keeps_ids": "passed",
+    "uuid_collision_aborts_without_regeneration": "passed",
+    "native_or_json_constraints": "passed",
+    "active_pending_waiting_limits": [
+      5,
+      10,
+      10
+    ],
+    "damaged_inventory_and_strict_surplus_fifo": "passed",
+    "real_native_commit_then_injected_ack_loss": "passed",
+    "command_executions": 1,
+    "commit_executions": 2,
+    "real_write_then_abort_points": 9,
+    "entry_link_audit_receipt_registry_rollback": "passed",
+    "global_expiration_batch_sizes": [
+      500,
+      1
+    ],
+    "expired_in_one_uow": 501,
+    "measured_query_plans": [
+      {
+        "collection": "loans",
+        "candidate_index": "loan_time_order",
+        "optimizer": {
+          "indexes": [
+            "loan_time_order"
+          ],
+          "blocking_sort": false,
+          "returned": 19,
+          "documents_examined": 19
+        },
+        "explicit_hint": {
+          "indexes": [
+            "loan_time_order"
+          ],
+          "blocking_sort": false,
+          "returned": 19,
+          "documents_examined": 19
+        }
+      },
+      {
+        "collection": "loans",
+        "candidate_index": "borrower_time_order",
+        "optimizer": {
+          "indexes": [
+            "borrower_time_order"
+          ],
+          "blocking_sort": false,
+          "returned": 1,
+          "documents_examined": 1
+        },
+        "explicit_hint": {
+          "indexes": [
+            "borrower_time_order"
+          ],
+          "blocking_sort": false,
+          "returned": 1,
+          "documents_examined": 1
+        }
+      },
+      {
+        "collection": "reservations",
+        "candidate_index": "user_reservation_order",
+        "optimizer": {
+          "indexes": [
+            "user_reservation_order"
+          ],
+          "blocking_sort": false,
+          "returned": 1,
+          "documents_examined": 1
+        },
+        "explicit_hint": {
+          "indexes": [
+            "user_reservation_order"
+          ],
+          "blocking_sort": false,
+          "returned": 1,
+          "documents_examined": 1
+        }
+      }
+    ],
+    "query_plan_fixture_is_not_a_load_benchmark": true,
+    "native_process_races": {
+      "checked": true,
+      "real_process_races": 7,
+      "last_copy_fifo_cancellation_and_actor_key": "passed"
+    }
+  },
+  "generated_corpus": {
+    "private_steps": 48,
+    "receipt_steps": 48,
+    "sequences_completed": 8,
+    "status": "passed",
+    "engine": "MongoDB",
+    "generator_executed_here": false,
+    "native_failure_shrinking": false,
+    "oracle": "shared-stdlib-symbolic-model",
+    "positive_control_native_valid_insert": true,
+    "native_invalid_integer_field_types_rejected_121": 3
+  },
+  "regression_contracts_passed": [
+    "repository",
+    "references",
+    "last-enabled-admin",
+    "forced-write-conflict112",
+    "authentication",
+    "catalogue",
+    "copy-and-receipts",
+    "readonly-authorization",
+    "personal-collections-and-audit",
+    "public-catalogue"
+  ],
+  "least_privilege_refusals": {
+    "anonymous": true,
+    "create_user": true,
+    "create_index": true,
+    "unrelated_database": true
+  },
+  "cleanup": {
+    "driver_removed": true,
+    "server_removed": true,
+    "owned_volumes_removed": 2,
+    "remaining_owned_resources": 0
+  },
+  "stable_api_continuity": {
+    "same_container": true,
+    "same_image": true,
+    "health": "healthy"
+  },
+  "prior_native_failure": {
+    "runner_sha256": "9282818d7c4742b10694203bea9af0256b9e4d21c427ef98266ce1505384aa6f",
+    "error": "TransactionUnavailable",
+    "context_code": 112,
+    "label": "TransientTransactionError",
+    "failed_elapsed_ms": 85,
+    "winning_status": 200,
+    "winning_elapsed_ms": 99,
+    "diagnostic_receipt_sha256": "a07a2b5609568a15a217207be6765b35452def34e31f822afb2a318352cbddd9"
+  },
+  "limits": [
+    "One isolated replica-set member provides no physical redundancy",
+    "Lost commit acknowledgment is a test injection after an actual server commit, not a real network fault",
+    "Tiny-fixture explain statistics are not a load benchmark",
+    "Generated corpus is replayed here; Hypothesis generation and shrinking run separately on the controller",
+    "The public Docker gate must also pass against the committed source in CI",
+    "No final Enterprise2.1 release or security certification is asserted"
+  ]
+}

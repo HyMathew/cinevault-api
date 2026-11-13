@@ -17,6 +17,70 @@ def digest(value):
     ).hexdigest()
 
 
+def _validate_circulation_response(record, valid_uuid):
+    response = record["response"]
+    loan = record["operation"] == "loan.request"
+    fields = (
+        {
+            "id",
+            "movie_id",
+            "borrower_id",
+            "copy_id",
+            "status",
+            "requested_at",
+            "approved_at",
+            "due_at",
+            "returned_at",
+            "cancelled_at",
+        }
+        if loan
+        else {
+            "id",
+            "movie_id",
+            "user_id",
+            "status",
+            "sequence",
+            "created_at",
+            "expires_at",
+            "closed_at",
+            "loan_id",
+        }
+    )
+    if type(response) is not dict or set(response) != {*fields, "_etag"}:
+        raise ValueError("Invalid cached circulation response")
+    actor = "borrower_id" if loan else "user_id"
+    created = "requested_at" if loan else "created_at"
+    if (
+        not valid_uuid(response["id"])
+        or not valid_uuid(response["movie_id"])
+        or response[actor] != record["actor_id"]
+        or type(response[created]) is not int
+        or response[created] != record["created_at"]
+        or response["status"] != ("pending" if loan else "waiting")
+    ):
+        raise ValueError("Invalid cached circulation identity or state")
+    nulls = (
+        ("copy_id", "approved_at", "due_at", "returned_at", "cancelled_at")
+        if loan
+        else ("closed_at", "loan_id")
+    )
+    if any(response[field] is not None for field in nulls):
+        raise ValueError("Invalid cached circulation dates")
+    if not loan and (
+        type(response["sequence"]) is not int
+        or response["sequence"] < 1
+        or type(response["expires_at"]) is not int
+        or response["expires_at"] != record["created_at"] + 14 * 86400
+    ):
+        raise ValueError("Invalid cached reservation sequence or expiration")
+    body = {key: value for key, value in response.items() if key != "_etag"}
+    if (
+        response["_etag"] != '"' + digest(body) + '"'
+        or digest({"movie_id": response["movie_id"]}) != record["request_hash"]
+    ):
+        raise ValueError("Inconsistent cached circulation receipt")
+
+
 def validate_receipts(document, ids, valid_uuid):
     records = document["idempotency_records"]
     if len(records) > 10000:
@@ -39,7 +103,8 @@ def validate_receipts(document, ids, valid_uuid):
             not valid_uuid(record["id"])
             or record["id"] in ids
             or record["actor_id"] not in users
-            or record["operation"] not in ("copy.create", "catalog.import")
+            or record["operation"]
+            not in ("copy.create", "catalog.import", "loan.request", "reservation.create")
         ):
             raise ValueError("Invalid receipt identity")
         if any(
@@ -56,6 +121,11 @@ def validate_receipts(document, ids, valid_uuid):
         if key in keys:
             raise ValueError("Duplicate receipt key")
         response = record["response"]
+        if record["operation"] in ("loan.request", "reservation.create"):
+            _validate_circulation_response(record, valid_uuid)
+            ids.add(record["id"])
+            keys.add(key)
+            continue
         if record["operation"] == "catalog.import":
             counts = ("created_movies", "created_copies", "skipped_movies", "skipped_copies")
             if (

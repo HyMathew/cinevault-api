@@ -8,6 +8,7 @@ from pymongo import ReturnDocument
 
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
+from .mongo_circulation import MongoCirculation
 from .mongo_model import INT64_MAX
 from .mongo_repositories import (
     MongoAccounts,
@@ -32,6 +33,12 @@ class _MongoWork:
         self._receipts = MongoReceipts(scope)
         self._personal = MongoPersonal(scope)
         self._events = MongoEvents(scope)
+        self._circulation = MongoCirculation(scope)
+
+    @property
+    def circulation(self) -> MongoCirculation:
+        self._scope.check()
+        return self._circulation
 
     @property
     def personal(self) -> MongoPersonal:

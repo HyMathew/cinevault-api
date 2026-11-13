@@ -97,6 +97,14 @@ class _Repository:
 
 
 class JsonAccounts(_Repository):
+    def by_ids(self, identities: list[str]) -> list[Record]:
+        self._scope.check()
+        if type(identities) is not list or len(identities) > 100:
+            raise ValueError("Account page identities contain at most 100 items")
+        for identity in identities:
+            _identity(identity)
+        return copy.deepcopy([row for row in self._scope.rows("users") if row["id"] in identities])
+
     def get(self, identity: str) -> Record | None:
         return self._get("users", identity)
 

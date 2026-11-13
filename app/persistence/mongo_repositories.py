@@ -47,6 +47,8 @@ class _MongoScope:
                 "idempotency_records",
                 "collections",
                 "audit_events",
+                "loans",
+                "reservations",
             )
         }
         self._deleted = {name: set() for name in ("movies", "copies")}
@@ -100,6 +102,48 @@ class _MongoScope:
         ):
             raise ValueError("Entity identity registry is inconsistent")
 
+    def _parent(self, document, name, identity):
+        if identity is None:
+            return
+        raw = self.find(name, {"_id": identity})
+        if raw is not None and all(row["id"] != identity for row in document[name]):
+            document[name].append(decode_record(name, raw))
+
+    def _loan_parents(self, document, loan):
+        self._parent(document, "users", loan["borrower_id"])
+        self._parent(document, "movies", loan["movie_id"])
+        self._parent(document, "copies", loan["copy_id"])
+
+    def _circulation_fragment(self, document, name, record):
+        if name == "loans":
+            self._loan_parents(document, record)
+            linked = self.find("reservations", {"loan_id": record["id"], "status": "fulfilled"})
+            if linked is not None:
+                linked = decode_record("reservations", linked)
+                document["reservations"].append(linked)
+                self._parent(document, "users", linked["user_id"])
+                self._parent(document, "movies", linked["movie_id"])
+            for status, limit in (("pending", 10), ("active", 5)):
+                count = self.collection("loans").count_documents(
+                    {"borrower_id": record["borrower_id"], "status": status},
+                    session=self._session,
+                )
+                if count > limit:
+                    raise ValueError("Borrower loan limit exceeded")
+        else:
+            self._parent(document, "users", record["user_id"])
+            self._parent(document, "movies", record["movie_id"])
+            if record["loan_id"] is not None:
+                self._parent(document, "loans", record["loan_id"])
+                for loan in document["loans"]:
+                    self._loan_parents(document, loan)
+            count = self.collection("reservations").count_documents(
+                {"user_id": record["user_id"], "status": "waiting"},
+                session=self._session,
+            )
+            if count > 10:
+                raise ValueError("Reservation limit exceeded")
+
     def validate(self):
         """Validate touched entities and their final references, never a DB snapshot."""
         self.check()
@@ -112,7 +156,9 @@ class _MongoScope:
                 document = empty_document()
                 document["revision"] = self._revision
                 document[name] = [record]
-                if name == "collections":
+                if name in ("loans", "reservations"):
+                    self._circulation_fragment(document, name, record)
+                elif name == "collections":
                     parent = self.find("users", {"_id": record["owner_id"]})
                     movie = self.find("movies", {"_id": record["movie_id"]})
                     if parent is not None:
@@ -207,6 +253,20 @@ class _Repository:
 
 
 class MongoAccounts(_Repository):
+    def by_ids(self, identities: list[str]) -> list[Record]:
+        self._scope.check()
+        if type(identities) is not list or len(identities) > 100:
+            raise ValueError("Account page identities contain at most 100 items")
+        for identity in identities:
+            _identity(identity)
+        if not identities:
+            return []
+        with self._scope.collection("users").find(
+            {"_id": {"$in": identities}},
+            session=self._scope._session,
+        ) as cursor:
+            return [decode_record("users", row) for row in cursor]
+
     def get(self, identity: str) -> Record | None:
         return self._get("users", identity)
 
