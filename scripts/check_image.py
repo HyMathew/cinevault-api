@@ -35,14 +35,14 @@ decoded = bson.decode(bson.encode({'integer': Int64(2**53 + 1), 'flag': True, 't
 assert type(decoded['integer']) is Int64 and decoded['integer'] == 2**53 + 1
 assert type(decoded['flag']) is bool and decoded['text'] == 'Échos'
 assert len(collection_schemas()) == 10
-assert sum(map(len, collection_indexes().values())) == 25
+assert sum(map(len, collection_indexes().values())) == 28
 installed = {d.metadata['Name'].lower().replace('_', '-') for d in metadata.distributions()}
 assert not installed.intersection({'hatchling', 'hatch-requirements-txt', 'setuptools',
     'tomlkit', 'pathspec', 'pluggy', 'trove-classifiers'})
 assert all((Path('/usr/share/licenses/cinevault-mongodb') / name).is_file()
     for name in ('pymongo-LICENSE', 'pymongo-THIRD-PARTY-NOTICES', 'dnspython-LICENSE'))
 print(json.dumps({'pymongo': pymongo.version, 'dnspython': metadata.version('dnspython'),
-    'c_extensions': False, 'bson_int64_exact': True, 'schemas': 10, 'indexes': 25,
+    'c_extensions': False, 'bson_int64_exact': True, 'schemas': 10, 'indexes': 28,
     'build_tools_absent': True, 'notices_present': True}))
 """
 
