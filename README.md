@@ -12,6 +12,7 @@ Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 d
 - [Collections privées et audit minimal](docs/collections-contract.md).
 - [Prêts et réservations](docs/lending-contract.md), [file et expiration](docs/reservations.md).
 - [Service commun de circulation JSON/MongoDB](docs/circulation-service.md) et [qualification native](docs/circulation-native-qualification.md).
+- [Propriétés générées, mutations ciblées et replay natif](docs/property-testing.md), avec [reçu P4 sur MongoDB réel](docs/evidence/property-p4-native-20261114.json).
 - [Protection des créations contre les doubles envois](docs/idempotency.md).
 - [Import/export JSON et CSV du catalogue](docs/import-export-contract.md).
 - [Statistiques et recommandations explicables](docs/insights-contract.md).

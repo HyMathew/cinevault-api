@@ -88,8 +88,10 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pip check
+      - name: Generate bounded circulation input on the controller
+        run: python tests/properties/export_circulation_corpus.py --output reports/circulation-native-corpus.json
       - name: Authenticated replica set, real transactions and least-privilege application contract
-        run: python scripts/check_mongodb.py
+        run: python scripts/check_mongodb.py --circulation-corpus reports/circulation-native-corpus.json
       - name: Keep sanitized MongoDB receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -99,6 +101,7 @@ jobs:
             reports/mongodb-check.json
             reports/mongodb-tests.xml
             reports/mongodb-tests.log
+            reports/circulation-native-corpus.json
           retention-days: 7
           if-no-files-found: error
   image:

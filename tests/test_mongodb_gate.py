@@ -18,6 +18,49 @@ from scripts.check_mongodb import (
 
 
 class MongoGateBoundaryTests(unittest.TestCase):
+    def test_optional_circulation_corpus_is_checked_completely_before_engine_io(self):
+        from scripts import check_mongodb
+
+        load = getattr(check_mongodb, "load_circulation_corpus", None)
+        self.assertTrue(callable(load), "Native replay must validate its complete input first")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "corpus.json"
+            value = {
+                "format": 1,
+                "domain": "circulation",
+                "seed": 42,
+                "cases": [{"domain": "maintenance"}, {"domain": "unknown"}],
+            }
+            path.write_text(json.dumps(value), encoding="utf-8")
+            with patch("scripts.check_mongodb.command") as engine:
+                with self.assertRaisesRegex(RuntimeError, "Invalid circulation corpus input"):
+                    load(path)
+                engine.assert_not_called()
+            path.write_bytes(b" " * 65537)
+            with self.assertRaisesRegex(RuntimeError, "Invalid circulation corpus input"):
+                load(path)
+
+    def test_optional_circulation_corpus_preserves_exact_bytes_and_needs_no_generator(self):
+        import hashlib
+
+        from scripts import check_mongodb
+
+        load = getattr(check_mongodb, "load_circulation_corpus", None)
+        self.assertTrue(callable(load), "Native replay must expose the exact corpus digest")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "corpus.json"
+            value = {
+                "format": 1,
+                "domain": "circulation",
+                "seed": 42,
+                "cases": [{"domain": "maintenance"}],
+            }
+            raw = (json.dumps(value, indent=2) + "\n").encode()
+            path.write_bytes(raw)
+            actual, digest = load(path)
+            self.assertEqual(actual, value)
+            self.assertEqual(digest, hashlib.sha256(raw).hexdigest())
+
     def test_kernel_incompatibility_is_rejected_without_bypassing_server_protection(self):
         from scripts import check_mongodb
 

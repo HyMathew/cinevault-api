@@ -181,9 +181,158 @@ copie a été restaurée. Cela ne signifie ni couverture exhaustive par mutation
 ni mutation du driver réseau, ni preuve des courses ou pannes réelles. Une famille
 future garde son statut non exécuté jusqu'à sa propre expérience.
 
+## P4 — circulation : plans symboliques et vraies limites
+
+Le module [circulation.py](../tests/properties/circulation.py) utilise un oracle
+de tickets nommés, une file ordonnée et un emplacement physique. Il décrit des
+transitions contractuelles explicites, sans appeler les prédicats de priorité,
+les fonctions d'expiration, les digests ou les ETags de production pour calculer
+ses attentes. Les UUID/ETags renvoyés sont liés aux symboles comme valeurs opaques ;
+la séquence de réservation est contrôlée strictement croissante, sans prédire sa
+valeur technique. Les lectures de contrôle ciblent les identités connues, des
+pages complètes bornées par chacun des quatre propriétaires de fixture et une
+page d'audits bornée, pas un snapshot global Mongo. Le DTO CirculationQuery sert
+seulement à ces lectures : aucun prédicat métier ne calcule les attentes. Le total,
+les identités uniques, le champ propriétaire et le contenu de chaque page sont
+comparés à l'ensemble exact attendu **pour cet acteur avant union**. Cela détecte
+les créations parasites, mais aussi une page renvoyant toutes les entités connues
+à chaque propriétaire. Les deux contrôles positifs initiaux injectent un prêt puis
+une réservation valides hors du plan et exigent leur détection.
+
+Les audits sont lus en pages de 100 dans la même lecture cohérente, jusqu'au total
+retenu annoncé, dont la borne contractuelle de 2000 est vérifiée explicitement. Un
+total supérieur, une page manquante ou des IDs dupliqués font échouer le contrôle :
+il ne s'agit pas de qualifier silencieusement un préfixe incomplet. Les audits
+attendus doivent rester dans cette rétention bornée ; si leur éviction rend
+l'oracle incomplet, le test échoue plutôt que de purger ou ignorer l'historique.
+
+Dans un JSON neuf isolé, **tous** ces audits sont comparés au plan, y compris un
+audit système `actor_id=None` pour un ID inconnu. Sur un backend fourni/partagé, le périmètre
+est celui de nos quatre acteurs **ou** des identités du plan : un audit émis par
+notre acteur pour un ID inconnu est détecté, tandis que les expirations `actor_id=None` des
+autres fixtures restent admises. Ce périmètre ne prétend pas auditer toutes les
+actions étrangères du backend. Les témoins RED/GREEN supplémentaires injectent
+les deux faux verts (audit inconnu et pages sans filtre propriétaire) et vérifient
+le contraste avec une vraie expiration étrangère légitime, dont 125 audits
+historiques de bruit placent nos événements au-delà de la première page.
+
+| Campagne P4 | Budget vert | Contrats observés |
+| --- | --- | --- |
+| FIFO |25plans générés|Permutation des trois demandeurs, toutes combinaisons d'annulation, aucun saut/avant/à/après14jours ; tête contre suivant, dernier exemplaire occupé, retours successifs, fulfillment exact, options et historique.|
+| Quotas |10plans générés|Onze films distincts ; dix demandes pending, cinq prêts actifs et dix attentes réels, refus du suivant puis libération et nouvelle admission. Aucun seuil réduit.|
+| Reçus |6plans générés|Deux créations × avant/à/après24h ; namespace acteur-clé commun aux opérations, contenu divergent, clôture puis replay historique, ancienne identité conservée et nouvelle identité après TTL.|
+| Régressions nommées |6exemples fixes|Même oracle, dont expiration commit sur refus métier403 et rollback sur exception de payload ; la réservation14jours expire après son reçu24h et une nouvelle création ne ressuscite jamais l'ancienne identité.|
+
+Les plans FIFO réessaient les reçus de prêt lorsqu'il est actif puis retourné,
+sans remettre l'entité vivante à son état pending historique. Chaque exemple
+utilise un vrai fichier JSON neuf et le service de circulation commun. Le modèle
+vérifie statuts, liens, unicité de l'exemplaire actif et ordre/acteur/timestamp de
+chaque audit attendu aux étapes de contrôle. Les sessions après un saut temporel
+sont renouvelées par fixture conforme aux bornes réelles ; ce n'est pas un test
+de login. Les audits antérieurs ne sont ni purgés ni réécrits.
+
+Les compteurs `circulation_fifo_json`, `circulation_quotas_json` et
+`circulation_receipts_json` comptent les seuls exemples générés terminés et les
+appels de service, pas les écritures de fixture ni les lectures d'invariants.
+`circulation_corpus_json` compte un export complet de huit séquences comme un
+exemple et conserve son nombre réel d'appels. Les régressions fixes ne gonflent
+pas ces compteurs. La réduction Hypothesis est disponible sur le contrôleur ;
+aucun nombre d'exemples ne constitue une preuve exhaustive.
+
+```text
+python -m pytest -q tests/properties/test_circulation_sequences.py tests/properties/test_circulation_corpus.py -W error --hypothesis-show-statistics
+python tests/properties/export_circulation_corpus.py --output reports/circulation-native-corpus.json
+```
+
+L'export exige un nouveau fichier, utilise la graine20261113 par défaut et garde
+son hash. Il contient deux plans FIFO, deux quotas, deux reçus, maintenance et
+expiration du reçu de réservation, soit huit séquences. Le test exporte deux fois
+avec la même graine, compare les octets puis exécute le corpus sur un vrai JSON
+prépeuplé. Ce format séparé conserve intact le corpus P1-P3 à huit séquences.
+Les cas sont intégralement validés avant accès à la persistance, y compris le
+dernier cas invalide, les booléens à la place d'entiers et les budgets dépassés.
+
+Sur une base native **jetable**, provisionnée avec les schémas exacts et le compte
+applicatif, avec `tests/` dans `sys.path` :
+
+```python
+from properties.circulation_corpus import exercise_circulation_corpus
+
+result = exercise_circulation_corpus(database, corpus)
+```
+
+L'interpréteur ne dépend ni d'Hypothesis ni de nouvelles dépendances externes ;
+il utilise le runtime applicatif existant. La préparation Hypothesis reste sur
+le contrôleur. Le reçu indique `generator_executed_here=false`,
+`native_failure_shrinking=false` et `concurrent_engine_exercised=false`.
+La maintenance peut expirer d'autres attentes de la base jetable au même instant :
+ce corpus ne doit pas cibler une base stable. Son propriétaire nettoie la base
+jetable. Cette entrée préparée n'est pas une exécution Mongo ; cette campagne
+locale ne prétend pas fournir une preuve de concurrence moteur ou de panne réseau.
+
+Quatre expériences C4 supplémentaires réutilisent le runner d'export immuable,
+sans modifier les douze expériences P1-P3 : FIFO ignorée, expiration exclusive
+à la frontière exacte, dixième demande pending rejetée et réponse historique du
+reçu réécrite. Chacune doit échouer sur une assertion comportementale nommée,
+sans erreur de collection/import ni skip ; le code applicatif du checkout reste
+inchangé. Aucun score global n'est calculé.
+
+```text
+python tests/properties/circulation_mutation_gate.py --source-ref SHA_EXACT --output REPERTOIRE_NEUF_HORS_CHECKOUT
+```
+
+Les deux commandes de mutation restent séparées. Le workflow de propriétés
+conserve le job à douze cas P1-P3 et ajoute un job à quatre cas de circulation,
+avec ses patchs, JUnit, baseline et reçus propres. Les deux OS exportent aussi
+le corpus P4. La commande générale `pytest tests/properties` découvre les tests
+P4. Ce raccord doit encore réussir sa CI au commit exact ; sa présence dans le
+workflow ne constitue pas une preuve d'exécution.
+
+Le gate Mongo exporte les plans dans un processus contrôleur distinct, puis
+utilise l'identité applicative du replica set jetable pour leur interprétation :
+
+```text
+python tests/properties/export_circulation_corpus.py --output reports/circulation-native-corpus.json
+python scripts/check_mongodb.py --circulation-corpus reports/circulation-native-corpus.json
+```
+
+Le gate valide intégralement l'entrée bornée à 64 Kio avant toute opération
+Docker, conserve son SHA-256 et refuse un replay incomplet ou un import Hypothesis
+dans l'interpréteur. Sans cette option, ses contrats natifs historiques restent
+disponibles. Le processus de génération peut utiliser Hypothesis installé dans
+l'environnement de test ; le replay n'importe pas ce générateur.
+
+## Qualification native locale P4 du 14 novembre 2026
+
+Le [reçu natif](evidence/property-p4-native-20261114.json) et son
+[manifeste de 85 sources](evidence/property-p4-native-source-20261114.json)
+qualifient le code applicatif API7aa9b05 avec les deux helpers de replay du gel
+P4 R2, SHA `7a9376752e65c93a6fd0c62b27353859253967dc954aae513b2c6672dbc3c78e`.
+Le [corpus exact](evidence/property-p4-corpus-20261114.json), SHA
+`4b34c2ac90d9b07ff6d8c1e6339fdf82022e41c1846d51f8c611f0f81c94d730`,
+a exécuté **8 séquences et 149 appels de service sur MongoDB8.0.34 réel**.
+Il vérifie les mêmes ensembles par propriétaire et audits retenus que JSON.
+La génération reste sur le contrôleur ; shrinking natif et campagne P4
+concurrente ne sont pas exécutés.
+
+Les contrats C1-C4 et le corpus P1-P3 sont conservés dans cette même sonde,
+dont sept courses entre processus appartiennent au contrat C4 distinct.
+Les 153 secondes environ couvrent toute la sonde, sans constituer une mesure de
+performance P4. Le driver, le serveur et les deux volumes possédés sont supprimés ;
+un postcontrôle confirme le conteneur stable et son image inchangés, sains, sans
+ressource d'essai restante. Le replica set à un membre n'apporte aucune redondance.
+Les 89 fichiers de source, programmes et résultat sont conservés avec leurs
+empreintes dans l'archive persistante de qualification.
+
+Cette preuve utilise le pilote de sonde privé historique. Elle ne démontre pas
+l'exécution du nouveau raccord CI public ci-dessus, encore distincte et à suivre.
+La commande publique permet de reproduire le replay sans cet environnement privé.
+
 ## Périmètre restant
 
-Prêts/réservations (P4), migration JSON↔Mongo (P5), admission équitable et historique
-complet gardent leurs contrats et chantiers propres. Aucune propriété décorative
+Le raccord CI P4 reste à qualifier au commit exact ; les mesures de
+concurrence moteur restent dans les vrais tests dédiés. Migration JSON↔Mongo
+(P5), admission équitable et capacité historique complète gardent leurs contrats
+et chantiers propres. Aucune propriété décorative
 sur un module non livré, aucun seuil métier réduit et aucune protection désactivée.
 La publication ou un déploiement ne découle pas d'un succès local de ce lot.

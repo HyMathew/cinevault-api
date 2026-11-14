@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "Actual circulation services on a disposable authenticated MongoDB, with a controller-generated P4 corpus; no HTTP activation or release",
+  "started_at_utc": "2026-11-14T02:34:29.794125+00:00",
+  "finished_at_utc": "2026-11-14T02:37:02.819602+00:00",
+  "application_base_git": "7aa9b05f419d8c4ef4840e35c8d04be7ada216c5",
+  "overlay_manifest_sha256": "7a9376752e65c93a6fd0c62b27353859253967dc954aae513b2c6672dbc3c78e",
+  "native_source_manifest_sha256": "1575198c69ab0edb9cdd379dac0d10f55c6c8698b211b2bbae1b63439124be9c",
+  "native_source_files": 85,
+  "source_representation": "Committed Git archive bytes, including existing CRLF blobs, plus two byte-exact frozen P4 replay helpers and two bounded corpus files",
+  "corpus_sha256": "4b34c2ac90d9b07ff6d8c1e6339fdf82022e41c1846d51f8c611f0f81c94d730",
+  "probe_sha256": "eb7e489e7a1fd9236dc6505d5f16780372addd95842f3b0be1491669936ef3ba",
+  "driver_program_sha256": "ef42718a711de653a97cdab3921f8fecc8ba41f5cc7009249543814685b0b27a",
+  "private_result_sha256": "516a51d240f9d5341319617ee0a9d69f90c3c49653ee37affc36d0e5d4063035",
+  "persistent_files_verified": 89,
+  "mongodb_image": "mongo@sha256:1d7a2d487c6465ea022474b90b65d6c91bb600b421b65880d8c6e141d6122200",
+  "server_version": "8.0.34",
+  "application_sdk": "PyMongo 4.19.0, pure Python build; dnspython 2.9.2",
+  "replica_members": 1,
+  "container_policy": {
+    "ReadonlyRootfs": true,
+    "NetworkMode": "none",
+    "Memory": 805306368,
+    "MemorySwap": 805306368,
+    "PidsLimit": 128,
+    "CapDrop": [
+      "ALL"
+    ],
+    "SecurityOpt": [
+      "no-new-privileges"
+    ]
+  },
+  "circulation_generated_corpus": {
+    "sequences_completed": 8,
+    "service_actions_completed": 149,
+    "generator_executed_here": false,
+    "native_failure_shrinking": false,
+    "concurrent_engine_exercised": false
+  },
+  "retained_native_regressions": {
+    "circulation": {
+      "circulation_service": "passed",
+      "fifo_and_receipts": true,
+      "native_targeted_trace": {
+        "checked": true,
+        "commands": 527
+      },
+      "expiration_order_and_exception_rollback": "passed",
+      "actor_key_and_lost_ack_reconciliation": "passed",
+      "targeted_fk_owner_and_closed_scope": "passed",
+      "abort_replay_with_additional_expiration_keeps_ids": "passed",
+      "uuid_collision_aborts_without_regeneration": "passed",
+      "native_or_json_constraints": "passed",
+      "active_pending_waiting_limits": [
+        5,
+        10,
+        10
+      ],
+      "damaged_inventory_and_strict_surplus_fifo": "passed",
+      "real_native_commit_then_injected_ack_loss": "passed",
+      "command_executions": 1,
+      "commit_executions": 2,
+      "real_write_then_abort_points": 9,
+      "entry_link_audit_receipt_registry_rollback": "passed",
+      "global_expiration_batch_sizes": [
+        500,
+        1
+      ],
+      "expired_in_one_uow": 501,
+      "measured_query_plans": [
+        {
+          "collection": "loans",
+          "candidate_index": "loan_time_order",
+          "optimizer": {
+            "indexes": [
+              "loan_time_order"
+            ],
+            "blocking_sort": false,
+            "returned": 19,
+            "documents_examined": 19
+          },
+          "explicit_hint": {
+            "indexes": [
+              "loan_time_order"
+            ],
+            "blocking_sort": false,
+            "returned": 19,
+            "documents_examined": 19
+          }
+        },
+        {
+          "collection": "loans",
+          "candidate_index": "borrower_time_order",
+          "optimizer": {
+            "indexes": [
+              "borrower_time_order"
+            ],
+            "blocking_sort": false,
+            "returned": 1,
+            "documents_examined": 1
+          },
+          "explicit_hint": {
+            "indexes": [
+              "borrower_time_order"
+            ],
+            "blocking_sort": false,
+            "returned": 1,
+            "documents_examined": 1
+          }
+        },
+        {
+          "collection": "reservations",
+          "candidate_index": "user_reservation_order",
+          "optimizer": {
+            "indexes": [
+              "user_reservation_order"
+            ],
+            "blocking_sort": false,
+            "returned": 1,
+            "documents_examined": 1
+          },
+          "explicit_hint": {
+            "indexes": [
+              "user_reservation_order"
+            ],
+            "blocking_sort": false,
+            "returned": 1,
+            "documents_examined": 1
+          }
+        }
+      ],
+      "query_plan_fixture_is_not_a_load_benchmark": true,
+      "native_process_races": {
+        "checked": true,
+        "real_process_races": 7,
+        "last_copy_fifo_cancellation_and_actor_key": "passed"
+      }
+    },
+    "p1_p3_corpus": {
+      "private_steps": 48,
+      "receipt_steps": 48,
+      "sequences_completed": 8,
+      "status": "passed",
+      "engine": "MongoDB",
+      "generator_executed_here": false,
+      "native_failure_shrinking": false,
+      "oracle": "shared-stdlib-symbolic-model",
+      "positive_control_native_valid_insert": true,
+      "native_invalid_integer_field_types_rejected_121": 3
+    },
+    "authentication_catalogue_copies_personal_public_and_authorization": "passed"
+  },
+  "cleanup": {
+    "driver_removed": true,
+    "mongodb_removed": true,
+    "two_owned_volumes_removed": true,
+    "postflight_no_probe_container_or_volume": true,
+    "stable_container_and_image_unchanged_and_healthy": true,
+    "postflight_sha256": "282ad979df10495a60a85edd5f4bad9c3edb56d2f2434b8abea83265402083d7"
+  },
+  "limits": [
+    "Single-member replica set: transactions, no redundancy or high availability",
+    "P4 plans generated on Windows controller, replayed without importing Hypothesis on the native interpreter; no native shrinking",
+    "P4 replay is sequential; seven real process races belong to the separate retained C4 regression contract",
+    "Whole probe duration includes historical foundation checks and C1-C4/P1-P3 regressions, not a P4 benchmark",
+    "Uncertain commit acknowledgment is injected after a real commit, not a physical network fault",
+    "Historical cv_model foundation payload is separate from the current application schema in cv_uow",
+    "No HTTP Mongo composition, JSON-Mongo migration, backup, deployment or release is qualified by this receipt",
+    "New public CI wiring was not executed by this private probe; its exact-commit CI evidence remains separate"
+  ]
+}

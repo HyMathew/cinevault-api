@@ -42,12 +42,44 @@ jobs:
         run: python -m pytest -q tests/properties -W error --hypothesis-show-statistics --junitxml=reports/property-tests.xml
       - name: Export bounded controller corpus for later native qualification
         run: python tests/properties/export_corpus.py --output reports/property-native-corpus.json
+      - name: Export bounded circulation plans separately from the native replayer
+        run: python tests/properties/export_circulation_corpus.py --output reports/property-circulation-native-corpus.json
       - name: Keep exact run receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: properties-${{ matrix.os }}
           path: reports/property-*
+          retention-days: 7
+          if-no-files-found: error
+  circulation-mutations:
+    needs: properties
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: >-
+          python -m pip install --require-hashes --only-binary=:all: --no-deps -r tests/properties/dependencies/requirements-hashed.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python scripts/check_lock.py requirements-dev.txt
+      - run: python -m pip check
+      - name: Four named circulation mutations in an isolated exact-commit export
+        run: python tests/properties/circulation_mutation_gate.py --source-ref "${{ github.sha }}" --output "${{ runner.temp }}/circulation-mutations"
+      - name: Keep the separate circulation patches and behavioral results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: circulation-mutation-experiments
+          path: |
+            ${{ runner.temp }}/circulation-mutations/*.json
+            ${{ runner.temp }}/circulation-mutations/*.patch
+            ${{ runner.temp }}/circulation-mutations/*.xml
+            ${{ runner.temp }}/circulation-mutations/*.log
           retention-days: 7
           if-no-files-found: error
   named-mutations:

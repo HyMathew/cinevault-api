@@ -1,6 +1,8 @@
 """Run the real MongoDB contract on an owned, authenticated disposable replica set."""
 
+import argparse
 import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -205,7 +207,26 @@ def denied(action):
     raise AssertionError("Expected authorization refusal 13")
 
 
-def application_contract(client, address, password, attempt):
+def load_circulation_corpus(path):
+    """Read and validate the entire bounded controller input before engine I/O."""
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root / "tests"))
+    from properties.circulation_corpus import validate_circulation_corpus
+
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(65537)
+        if len(raw) > 65536:
+            raise ValueError("Corpus input is too large")
+        corpus = json.loads(raw)
+        validate_circulation_corpus(corpus)
+    except (OSError, ValueError):
+        raise RuntimeError("Invalid circulation corpus input") from None
+    return corpus, hashlib.sha256(raw).hexdigest()
+
+
+def application_contract(client, address, password, attempt, *, circulation_corpus=None):
     """Maintenance provisions; the application receives only collection CRUD."""
     from pymongo import MongoClient
     from pymongo.monitoring import CommandListener
@@ -389,6 +410,30 @@ def application_contract(client, address, password, attempt):
             and circulation["native_process_races"]["checked"]
         ):
             raise RuntimeError("Required native circulation trace/process checks were not executed")
+        if circulation_corpus is not None:
+            from properties.circulation_corpus import exercise_circulation_corpus
+
+            result["circulation_generated_corpus"] = exercise_circulation_corpus(
+                app[name], circulation_corpus
+            )
+            replay = result["circulation_generated_corpus"]
+            if (
+                replay["sequences_completed"] != len(circulation_corpus["cases"])
+                or replay["service_actions_completed"] <= 0
+                or any(
+                    replay[flag] is not False
+                    for flag in (
+                        "generator_executed_here",
+                        "native_failure_shrinking",
+                        "concurrent_engine_exercised",
+                    )
+                )
+                or any(
+                    module == "hypothesis" or module.startswith("hypothesis.")
+                    for module in sys.modules
+                )
+            ):
+                raise RuntimeError("Required bounded circulation replay was not executed")
         denied(lambda: app[name].users.create_index("display_name"))
         denied(lambda: app[name].command("createUser", "forbidden", pwd="unused", roles=[]))
         denied(lambda: app["other_database"].users.find_one({}))
@@ -399,6 +444,14 @@ def application_contract(client, address, password, attempt):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--circulation-corpus", type=Path)
+    args = parser.parse_args()
+    circulation_corpus, corpus_digest = (
+        load_circulation_corpus(args.circulation_corpus)
+        if args.circulation_corpus is not None
+        else (None, None)
+    )
     if sys.platform != "linux" or os.getuid() == 0:
         raise RuntimeError("This disposable Docker gate requires a non-root Linux host user")
     root = Path(__file__).resolve().parents[1]
@@ -416,6 +469,8 @@ def main():
     maintenance_password, app_password = secrets.token_urlsafe(48), secrets.token_urlsafe(48)
     sensitive = [maintenance_password, app_password, secret.read_text(encoding="ascii")]
     receipt = {"image": IMAGE, "passed": False, "started_at": datetime.now(UTC).isoformat()}
+    if corpus_digest is not None:
+        receipt["circulation_corpus_sha256"] = corpus_digest
     diagnostics = Diagnostics(receipt, reports / "mongodb-check.json", sensitive)
     try:
         diagnostics.stage("host_kernel")
@@ -521,7 +576,7 @@ def main():
             receipt["server_version"] = build["version"]
             diagnostics.stage("application_privilege_contract")
             receipt["application_contract"] = application_contract(
-                client, address, app_password, attempt
+                client, address, app_password, attempt, circulation_corpus=circulation_corpus
             )
         diagnostics.stage("real_pytest_contract")
         junit = reports / "mongodb-tests.xml"
