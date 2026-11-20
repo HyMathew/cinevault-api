@@ -39,15 +39,29 @@ def context(enterprise):
     return client, path, manager, member, provider
 
 
+def test_metadata_and_posters_use_active_persistence_without_document_store(enterprise):
+    client, _, manager, _, provider = context(enterprise)
+    app = client.application
+    del app.extensions["enterprise_store"]
+    assert client.get("/api/v1/metadata/search?q=Metropolis", headers=manager).status_code == 200
+    assert client.get("/api/v1/metadata/Q151599", headers=manager).status_code == 200
+    assert client.get("/api/v1/posters?movie_id=00000000-0000-4000-8000-000000000001").json == {
+        "posters": {}
+    }
+    provider.search.assert_called_once_with("Metropolis")
+    provider.detail.assert_called_once_with("Q151599")
+    provider.cache.peek_many.assert_not_called()
+
+
 def test_metadata_roles_disabled_feature_and_network_outside_store_lock(enterprise, monkeypatch):
     client, path, manager, member, provider = context(enterprise)
     route = "/api/v1/metadata/search?q=Metropolis"
     assert client.get(route).status_code == 401
     assert client.get(route, headers=member).status_code == 403
     provider.search.assert_not_called()
-    store = client.application.extensions["enterprise_store"]
+    persistence = client.application.extensions["enterprise_persistence"]
     inside = [False]
-    original = store.transact
+    original = persistence.run
 
     def transaction(operation):
         inside[0] = True
@@ -56,7 +70,7 @@ def test_metadata_roles_disabled_feature_and_network_outside_store_lock(enterpri
         finally:
             inside[0] = False
 
-    monkeypatch.setattr(store, "transact", transaction)
+    monkeypatch.setattr(persistence, "run", transaction)
 
     def external(query):
         assert inside[0] is False
@@ -67,6 +81,27 @@ def test_metadata_roles_disabled_feature_and_network_outside_store_lock(enterpri
     client.application.extensions["metadata_client"] = None
     assert client.get(route, headers=manager).status_code == 503
     assert client.get("/api/v1/movies").status_code == 200
+
+
+def test_metadata_authority_precedes_request_and_provider_validation(enterprise):
+    client, _, manager, member, provider = context(enterprise)
+    for route, field in (
+        ("/api/v1/metadata/search?q=one&q=two", "query"),
+        ("/api/v1/metadata/search?wrong=one", "query"),
+        ("/api/v1/metadata/invalid", "external_id"),
+        ("/api/v1/metadata/Q151599?wrong=one", "query"),
+    ):
+        assert client.get(route).status_code == 401
+        assert client.get(route, headers=member).status_code == 403
+        response = client.get(route, headers=manager)
+        assert response.status_code == 422
+        assert set(response.json["error"]["fields"]) == {field}
+    provider.search.assert_not_called()
+    provider.detail.assert_not_called()
+    provider.search.side_effect = ValueError("private provider message")
+    response = client.get("/api/v1/metadata/search?q=x", headers=manager)
+    assert response.status_code == 422
+    assert "private provider message" not in response.get_data(as_text=True)
 
 
 def test_enrichment_source_is_server_verified_and_roundtrips_json_and_csv(enterprise):
