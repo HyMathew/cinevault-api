@@ -1,7 +1,6 @@
 """Explicit JSON unit of work over the existing atomic, fully validated store."""
 
 from collections.abc import Callable
-from contextlib import contextmanager
 from pathlib import Path
 
 from ..storage_v2 import V2Store
@@ -109,13 +108,3 @@ class JsonPersistence:
 
     def readiness(self) -> None:
         self.query(lambda work: None)
-
-
-@contextmanager
-def document_work(document):
-    """Bridge an owned legacy transaction without opening another file or UoW."""
-    work = _JsonWork(document, writable=True)
-    try:
-        yield work
-    finally:
-        work._close()

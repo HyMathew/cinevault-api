@@ -97,6 +97,10 @@ class _Repository:
 
 
 class JsonAccounts(_Repository):
+    def count(self) -> int:
+        self._scope.check()
+        return len(self._scope.rows("users"))
+
     def by_ids(self, identities: list[str]) -> list[Record]:
         self._scope.check()
         if type(identities) is not list or len(identities) > 100:

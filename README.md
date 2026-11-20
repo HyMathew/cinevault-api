@@ -65,6 +65,10 @@ Les créations sans écrasement exigent la prise en charge des liens physiques s
 
 ## Qualité et CI
 
+Les [services communs d'inscription et d'administration](docs/account-services.md)
+conservent l'admission avant Argon2, les droits actuels et les mutations atomiques.
+Leur extraction ne sélectionne pas encore Mongo pour toute l'API.
+
 Voir les [commandes, contrôles et limites](docs/quality.md). Les configurations de CI ne constituent pas une preuve d’exécution distante ; aucun badge de succès n’est ajouté avant un résultat GitHub réel.
 
 Le [socle d’exécution spécialisé et ses limites de reconstruction](docs/runtime.md) décrit les deux étapes de construction et les composants conservés.

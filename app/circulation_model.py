@@ -31,7 +31,7 @@ class ForbiddenScope(Exception):
     """A normal scope refusal, distinct from a validation exception."""
 
 
-def payload(data, required):
+def payload(data, required, optional=()):
     if isinstance(data, RequestBody):
         if not data.is_json:
             raise PayloadError(415)
@@ -45,7 +45,11 @@ def payload(data, required):
             )
         except (ValueError, UnicodeDecodeError, RecursionError):
             raise PayloadError(400) from None
-    if type(data) is not dict or set(data) != set(required):
+    if (
+        type(data) is not dict
+        or not set(required).issubset(data)
+        or set(data) - set(required) - set(optional)
+    ):
         raise ValidationError({"body": "Champs invalides."})
     return copy.deepcopy(data)
 

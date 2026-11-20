@@ -253,6 +253,10 @@ class _Repository:
 
 
 class MongoAccounts(_Repository):
+    def count(self) -> int:
+        self._scope.check()
+        return self._scope.collection("users").count_documents({}, session=self._scope._session)
+
     def by_ids(self, identities: list[str]) -> list[Record]:
         self._scope.check()
         if type(identities) is not list or len(identities) > 100:

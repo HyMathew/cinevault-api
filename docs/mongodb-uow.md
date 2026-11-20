@@ -3,8 +3,10 @@
 État : fondation implémentée pour les ports comptes, sessions, tentatives,
 catalogue, reçus, collections privées et événements de
 [contracts.py](../app/persistence/contracts.py), sans activation de routes REST.
-Ce lot ne constitue pas un backend Enterprise complet : circulation, admission,
-cache, administration des comptes et outils de migration restent des lots suivants.
+Ce document décrit le socle initial. Les extensions de [circulation](circulation-service.md)
+et d'[inscription/administration](account-services.md) ont leurs propres contrats
+et limites de qualification. Transfert, insights, métadonnées/cache, sélection
+exclusive HTTP et outils de migration restent nécessaires à un backend Enterprise complet.
 Aucune double écriture ni aucun repli vers JSON n'est introduit.
 
 ## Utilisation et frontières

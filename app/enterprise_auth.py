@@ -23,17 +23,27 @@ from .persistence.errors import CommitOutcomeUnknown, TransactionUnavailable
 from .persistence.json import JsonPersistence
 from .registration_admission import RegistrationAdmission, RegistrationBusy
 from .repository import unique_pairs
+from .services.accounts import AdminAccountService, RegistrationService
 from .services.authentication import (
     AuthenticationService,
     InvalidSession,
     attempt_key,
-    normalize_username,
-    public_profile,
     session_is_current,
     token_digest,
-    valid_display,
-    valid_password,
 )
+from .services.authentication import (
+    normalize_username as normalize_username,
+)
+from .services.authentication import (
+    public_profile as public_profile,
+)
+from .services.authentication import (
+    valid_display as valid_display,
+)
+from .services.authentication import (
+    valid_password as valid_password,
+)
+from .services.results import failure
 from .storage_v2 import V2Store
 from .validation import ValidationError
 
@@ -168,52 +178,41 @@ def authenticate_client_context():
             return unauthorized()
 
 
-def registration_problem(document, username):
-    if any(user["username"] == username for user in document["users"]):
-        return error(409, "conflict", "Identifiant indisponible.")
-    if len(document["users"]) >= 10000:
-        return error(503, "registration_capacity", "Inscription temporairement indisponible.")
-    return None
-
-
 @bp.post("/auth/register")
 def register():
     data = payload(("username", "display_name", "password"))
-    username = normalize_username(data["username"])
-    if (
-        not username
-        or not valid_display(data["display_name"])
-        or not valid_password(data["password"])
-    ):
-        raise ValidationError({"body": "Identifiant, nom ou mot de passe invalide."})
-    problem = registration_problem(check_store(), username)
-    if problem:
-        return problem
-    try:
-        user = current_app.extensions["registration_admission"].compute(
-            limit_key("register-ip:", g.auth_client_address),
-            now(),
-            lambda: make_user(username, data["display_name"], data["password"], "member", now()),
-        )
-    except RegistrationBusy as exc:
-        response, status = error(429, "rate_limited", "Trop de tentatives d’inscription.")
-        response.headers["Retry-After"] = str(exc.retry_after)
-        return response, status
-    except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
-        current_app.logger.error("Admission indisponible : %s", type(exc).__name__)
-        raise ServiceUnavailable("Inscription temporairement indisponible.") from exc
+    timestamp = now()
+    source_key = limit_key("register-ip:", g.auth_client_address)
 
-    def add(doc):
-        problem = registration_problem(doc, username)
-        if problem:
-            return problem
-        doc["users"].append(user)
-        return public_profile(user)
+    def prepare_hash(password):
+        try:
+            return current_app.extensions["registration_admission"].compute(
+                source_key, timestamp, lambda: hasher.hash(password)
+            )
+        except RegistrationBusy:
+            raise
+        except (OSError, ValueError, RecursionError, portalocker.exceptions.LockException) as exc:
+            current_app.logger.error("Admission indisponible : %s", type(exc).__name__)
+            raise ServiceUnavailable("Inscription temporairement indisponible.") from exc
 
-    profile = transact(add)
-    if not isinstance(profile, dict):
-        return profile
-    return jsonify(profile), 201
+    def operation():
+        try:
+            return RegistrationService(current_app.extensions["enterprise_persistence"]).register(
+                data["username"],
+                data["display_name"],
+                data["password"],
+                timestamp=timestamp,
+                prepare_hash=prepare_hash,
+            )
+        except RegistrationBusy as exc:
+            return failure(
+                429,
+                "rate_limited",
+                "Trop de tentatives d’inscription.",
+                headers={"Retry-After": str(exc.retry_after)},
+            )
+
+    return run_service(operation)
 
 
 def limit_key(prefix, value):
@@ -307,85 +306,29 @@ def forbidden():
 
 @bp.get("/users")
 def list_users():
-    def listing(doc, user, session):
-        if user["role"] != "admin":
-            return forbidden()
-        try:
-            limit = int(request.args.get("limit", "50"))
-            offset = int(request.args.get("offset", "0"))
-            if (
-                not 1 <= limit <= 100
-                or not 0 <= offset <= 10000
-                or set(request.args) - {"limit", "offset"}
-            ):
-                raise ValueError()
-        except ValueError:
-            raise ValidationError({"query": "Pagination invalide."})
-        users = sorted(doc["users"], key=lambda u: u["username"])
-        return jsonify(
-            users=[public_profile(u) for u in users[offset : offset + limit]],
-            total=len(users),
-            limit=limit,
-            offset=offset,
-        ), 200
-
-    return protected(listing)
+    return run_service(
+        lambda: AdminAccountService(current_app.extensions["enterprise_persistence"]).users(
+            bearer(), list(request.args.items(multi=True)), timestamp=now()
+        )
+    )
 
 
 @bp.get("/users/<user_id>")
 def get_user(user_id):
-    def get(doc, user, session):
-        if user["role"] != "admin" and user["id"] != user_id:
-            return forbidden()
-        target = next((u for u in doc["users"] if u["id"] == user_id), None)
-        if target is None:
-            return error(404, "not_found", "Compte introuvable.")
-        return jsonify(public_profile(target)), 200
-
-    return protected(get)
+    return run_service(
+        lambda: AdminAccountService(current_app.extensions["enterprise_persistence"]).get(
+            bearer(), user_id, timestamp=now()
+        )
+    )
 
 
 @bp.patch("/users/<user_id>")
 def update_user(user_id):
-    timestamp, namespace = now(), uuid.uuid4()
-
-    def update(doc, user, session):
-        if user["role"] != "admin":
-            return forbidden()
-        data = payload((), ("role", "enabled"))
-        if (
-            not data
-            or ("role" in data and data["role"] not in ("member", "manager", "admin"))
-            or ("enabled" in data and type(data["enabled"]) is not bool)
-        ):
-            raise ValidationError({"body": "Rôle ou statut invalide."})
-        target = next((u for u in doc["users"] if u["id"] == user_id), None)
-        if target is None:
-            return error(404, "not_found", "Compte introuvable.")
-        candidate = {**target, **data}
-        if (
-            target["role"] == "admin"
-            and target["enabled"]
-            and (candidate["role"] != "admin" or not candidate["enabled"])
-        ):
-            if not any(
-                u["id"] != target["id"] and u["role"] == "admin" and u["enabled"]
-                for u in doc["users"]
-            ):
-                return error(
-                    409, "last_admin", "Le dernier administrateur actif doit être conservé."
-                )
-        changed = any(target[k] != v for k, v in data.items())
-        target.update(data)
-        if not target["enabled"]:
-            from .reservation_service import cancel_disabled
-
-            cancel_disabled(doc, target["id"], user["id"], timestamp, namespace=namespace)
-        if changed:
-            doc["sessions"][:] = [s for s in doc["sessions"] if s["user_id"] != target["id"]]
-        return jsonify(public_profile(target)), 200
-
-    return protected(update)
+    return run_service(
+        lambda: AdminAccountService(current_app.extensions["enterprise_persistence"]).update(
+            bearer(), user_id, capture_body(), timestamp=now()
+        )
+    )
 
 
 @bp.post("/auth/logout")
