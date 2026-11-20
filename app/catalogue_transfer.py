@@ -1,13 +1,14 @@
 """Bounded catalogue-only formats, independent of private account data."""
 
-import copy
 import csv
 import io
 import json
 import uuid
+from collections import defaultdict
 
-from .enterprise_catalogue import COPY_FIELDS, MOVIE_FIELDS, copy_data, movie_data
+from .catalogue_query import movie_identity_key
 from .repository import unique_pairs
+from .services.catalogue_model import COPY_FIELDS, MOVIE_FIELDS, copy_data, movie_data
 from .validation import ValidationError
 
 COLUMNS = (
@@ -85,7 +86,7 @@ def normalize(content):
             if movie["id"] in ids:
                 invalid()
             ids.add(movie["id"])
-        key = (movie["title"].casefold(), movie["year"], movie["director"].casefold())
+        key = movie_identity_key(movie)
         if key in keys:
             invalid()
         keys.add(key)
@@ -162,7 +163,10 @@ def parse_csv(content):
         invalid()
 
 
-def export_document(document):
+def export_document(movies, copies):
+    by_movie = defaultdict(list)
+    for entry in sorted(copies, key=lambda row: row["id"]):
+        by_movie[entry["movie_id"]].append({field: entry[field] for field in ("id", *COPY_FIELDS)})
     return {
         "format_version": 1,
         "movies": [
@@ -172,13 +176,9 @@ def export_document(document):
                     for k in ("id", *MOVIE_FIELDS, "genres", "external_source")
                     if k in movie
                 },
-                "copies": [
-                    {k: entry[k] for k in ("id", *COPY_FIELDS)}
-                    for entry in document["copies"]
-                    if entry["movie_id"] == movie["id"]
-                ],
+                "copies": by_movie[movie["id"]],
             }
-            for movie in document["movies"]
+            for movie in sorted(movies, key=lambda row: row["id"])
         ],
     }
 
@@ -217,59 +217,3 @@ def export_csv(content):
                 )
             writer.writerow([csv_safe(row[k]) for k in columns])
     return "\ufeff" + output.getvalue()
-
-
-def prepare_import(document, incoming, policy):
-    candidate = copy.deepcopy(document)
-    used = {
-        entry["id"]
-        for collection in candidate.values()
-        if isinstance(collection, list)
-        for entry in collection
-        if isinstance(entry, dict) and "id" in entry
-    }
-    by_key = {
-        (m["title"].casefold(), m["year"], m["director"].casefold()): m for m in candidate["movies"]
-    }
-    result = {"created_movies": 0, "created_copies": 0, "skipped_movies": 0, "skipped_copies": 0}
-    for item in incoming:
-        attrs = {k: v for k, v in item.items() if k not in ("id", "copies")}
-        key = (item["title"].casefold(), item["year"], item["director"].casefold())
-        existing = by_key.get(key)
-        if item.get("id") in used and (existing is None or existing["id"] != item["id"]):
-            raise ImportConflict()
-        if existing:
-            if policy == "reject":
-                raise ImportConflict()
-            result["skipped_movies"] += 1
-            if policy == "skip":
-                result["skipped_copies"] += len(item["copies"])
-                continue
-            if any(existing[k] != v for k, v in attrs.items()):
-                raise ImportConflict()
-            movie_id = existing["id"]
-        else:
-            movie_id = item.get("id") or str(uuid.uuid4())
-            if movie_id in used:
-                raise ImportConflict()
-            candidate["movies"].append({"id": movie_id, **attrs})
-            used.add(movie_id)
-            result["created_movies"] += 1
-        for entry in item["copies"]:
-            copy_id = entry.get("id") or str(uuid.uuid4())
-            copy_attrs = {k: entry[k] for k in COPY_FIELDS}
-            if copy_id in used:
-                old = next((c for c in candidate["copies"] if c["id"] == copy_id), None)
-                if (
-                    policy == "append_copies"
-                    and old
-                    and old["movie_id"] == movie_id
-                    and all(old[k] == v for k, v in copy_attrs.items())
-                ):
-                    result["skipped_copies"] += 1
-                    continue
-                raise ImportConflict()
-            candidate["copies"].append({"id": copy_id, "movie_id": movie_id, **copy_attrs})
-            used.add(copy_id)
-            result["created_copies"] += 1
-    return candidate, result

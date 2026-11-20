@@ -7,6 +7,7 @@ from ..metadata_model import valid_source
 from ..validation import ValidationError, is_unicode, validate
 
 COPY_FIELDS = ("support", "location", "condition")
+MOVIE_FIELDS = ("title", "year", "director", "actors", "synopsis")
 SUPPORTS = ("numerique", "dvd", "blu-ray", "vhs", "autre")
 
 

@@ -1,12 +1,12 @@
 """Targeted MongoDB repositories bound to one owned transaction/session."""
 
 import re
-from itertools import islice
+from itertools import batched, islice
 from os import getpid
 from threading import get_ident
 
 from bson import Int64
-from pymongo.errors import DuplicateKeyError, OperationFailure
+from pymongo.errors import BulkWriteError, DuplicateKeyError, OperationFailure
 
 from ..auth_storage import USERNAME
 from ..catalogue_query import MovieQuery
@@ -16,6 +16,7 @@ from .contracts import Record
 from .mongo_model import INT64_MAX, collection_name, decode_record, encode_record
 
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
+_TRANSFER_BATCH = 500
 
 
 def _identity(value):
@@ -52,6 +53,7 @@ class _MongoScope:
             )
         }
         self._deleted = {name: set() for name in ("movies", "copies")}
+        self._imported = {name: set() for name in ("movies", "copies")}
 
     def check(self, *, write=False):
         if self._session is None:
@@ -70,12 +72,28 @@ class _MongoScope:
     def find(self, name, selector, projection=None):
         return self.collection(name).find_one(selector, projection, session=self._session)
 
+    def rows_by_ids(self, collection, identities, projection=None):
+        self.check()
+        rows = []
+        for group in batched(identities, _TRANSFER_BATCH):
+            with collection.find(
+                {"_id": {"$in": list(group)}}, projection, session=self._session
+            ) as cursor:
+                rows.extend(cursor)
+        return rows
+
     def write(self, method, *args, **kwargs):
         self.check(write=True)
         try:
             return method(*args, session=self._session, **kwargs)
         except (DuplicateKeyError, OperationFailure) as exc:
-            if isinstance(exc, DuplicateKeyError) or exc.code == 121:
+            bulk_constraint = isinstance(exc, BulkWriteError) and any(
+                error.get("code") in (11000, 121)
+                for error in (exc.details or {}).get("writeErrors", ())
+            )
+            if (
+                isinstance(exc, DuplicateKeyError) or exc.code == 121 or bulk_constraint
+            ) and not exc.has_error_label("TransientTransactionError"):
                 self._failure = ValueError("MongoDB entity violates a persistence constraint")
                 raise self._failure from None
             raise
@@ -144,11 +162,34 @@ class _MongoScope:
             if count > 10:
                 raise ValueError("Reservation limit exceeded")
 
+    def _validate_imported_catalogue(self):
+        if not any(self._imported.values()):
+            return
+        document = empty_document()
+        document["revision"] = self._revision
+        for name, identities in self._imported.items():
+            rows = self.rows_by_ids(self.collection(name), sorted(identities))
+            document[name] = [decode_record(name, row) for row in rows]
+        known_movies = {movie["id"] for movie in document["movies"]}
+        parent_ids = {copy["movie_id"] for copy in document["copies"]} - known_movies
+        parents = self.rows_by_ids(self.collection("movies"), sorted(parent_ids))
+        document["movies"].extend(decode_record("movies", row) for row in parents)
+        for group in batched(document["copies"], _TRANSFER_BATCH):
+            mismatches = [
+                {"copy_id": item["id"], "movie_id": {"$ne": item["movie_id"]}} for item in group
+            ]
+            if self.find("loans", {"$or": mismatches}, {"_id": 1}) is not None:
+                raise ValueError("Copy history cannot change its movie reference")
+        validate_document(document)
+
     def validate(self):
         """Validate touched entities and their final references, never a DB snapshot."""
         self.check()
+        self._validate_imported_catalogue()
         for name, identities in self._dirty.items():
             for identity in identities:
+                if identity in self._imported.get(name, ()):
+                    continue  # The batch check just validated its final transactional state.
                 raw = self.find(name, {"_id": identity})
                 if raw is None:
                     continue
@@ -582,6 +623,74 @@ class MongoEvents(_Repository):
 
 
 class MongoCatalogue(_Repository):
+    def import_movie_matches(self, keys):
+        collection = self._scope.collection("movies")
+        matches = {key: [] for key in keys}
+        identity_fields = {"title": "$title_key", "year": "$year", "director": "$director_key"}
+        for group in batched(matches, 100):
+            selectors = [
+                {"year": Int64(year), "title_key": title, "director_key": director}
+                for title, year, director in group
+            ]
+            pipeline = [
+                {"$match": {"$or": selectors}},
+                # The identity of the first result matters only when there is exactly one.
+                {
+                    "$group": {
+                        "_id": identity_fields,
+                        "rows": {"$firstN": {"input": "$$ROOT", "n": 2}},
+                    }
+                },
+            ]
+            with collection.aggregate(pipeline, session=self._scope._session) as cursor:
+                for row in cursor:
+                    key = row["_id"]
+                    matches[(key["title"], int(key["year"]), key["director"])] = [
+                        decode_record("movies", movie) for movie in row["rows"]
+                    ]
+        return matches
+
+    def occupied_import_ids(self, identities):
+        self._scope.check()
+        for identity in identities:
+            _identity(identity)
+        rows = self._scope.rows_by_ids(self._scope._database.entity_ids, identities, {"_id": 1})
+        return {row["_id"] for row in rows}
+
+    def import_copies(self, identities):
+        for identity in identities:
+            _identity(identity)
+        rows = self._scope.rows_by_ids(self._scope.collection("copies"), identities)
+        return {row["_id"]: decode_record("copies", row) for row in rows}
+
+    def export_records(self):
+        def records(name):
+            with (
+                self._scope.collection(name)
+                .find({}, session=self._scope._session)
+                .batch_size(_TRANSFER_BATCH) as cursor
+            ):
+                return [decode_record(name, row) for row in cursor]
+
+        return records("movies"), records("copies")
+
+    def insert_import(self, movies, copies):
+        self._scope.check(write=True)
+        prepared = [
+            (name, [encode_record(name, record) for record in records])
+            for name, records in (("movies", movies), ("copies", copies))
+        ]
+        for name, records in prepared:
+            for group in batched(records, _TRANSFER_BATCH):
+                claims = [{"_id": record["_id"], "kind": name} for record in group]
+                self._scope.write(
+                    self._scope._database.entity_ids.insert_many, claims, ordered=True
+                )
+                self._scope.write(
+                    self._scope.collection(name).insert_many, list(group), ordered=True
+                )
+                self._scope._imported[name].update(claim["_id"] for claim in claims)
+
     def movies_by_ids(self, identities: list[str]) -> list[Record]:
         self._scope.check()
         if type(identities) is not list or len(identities) > 100:

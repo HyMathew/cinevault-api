@@ -32,7 +32,8 @@ class ForbiddenScope(Exception):
 
 
 def payload(data, required, optional=()):
-    if isinstance(data, RequestBody):
+    decoded_here = isinstance(data, RequestBody)
+    if decoded_here:
         if not data.is_json:
             raise PayloadError(415)
         if data.error is not None:
@@ -51,7 +52,7 @@ def payload(data, required, optional=()):
         or set(data) - set(required) - set(optional)
     ):
         raise ValidationError({"body": "Champs invalides."})
-    return copy.deepcopy(data)
+    return data if decoded_here else copy.deepcopy(data)
 
 
 def empty_body(body):

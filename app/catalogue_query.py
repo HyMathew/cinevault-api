@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from .validation import SUPPORTS, ValidationError, is_unicode
 
 MOVIE_KEYS = frozenset({"search_key", "title_key", "director_key", "genre_keys"})
+type MovieKey = tuple[str, int, str]
+
+
+def movie_identity_key(movie) -> MovieKey:
+    return movie["title"].casefold(), movie["year"], movie["director"].casefold()
 
 
 def movie_keys(movie):

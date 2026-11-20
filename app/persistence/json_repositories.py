@@ -6,7 +6,7 @@ from os import getpid
 from threading import get_ident
 
 from ..auth_storage import USERNAME
-from ..catalogue_query import MovieQuery, movie_keys
+from ..catalogue_query import MovieQuery, movie_identity_key, movie_keys
 from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import COLLECTIONS, _valid_uuid
 from .contracts import Record
@@ -360,6 +360,47 @@ class JsonEvents(_Repository):
 
 
 class JsonCatalogue(_Repository):
+    def import_movie_matches(self, keys):
+        matches = {key: [] for key in keys}
+        for movie in self._scope.rows("movies"):
+            matches_for_key = matches.get(movie_identity_key(movie))
+            if matches_for_key is not None and len(matches_for_key) < 2:
+                matches_for_key.append(copy.deepcopy(movie))
+        return matches
+
+    def occupied_import_ids(self, identities):
+        for identity in identities:
+            _identity(identity)
+        wanted = set(identities)
+        return {
+            row["id"]
+            for name in COLLECTIONS
+            if name != "auth_attempts"
+            for row in self._scope.rows(name)
+            if row["id"] in wanted
+        }
+
+    def import_copies(self, identities):
+        for identity in identities:
+            _identity(identity)
+        wanted = set(identities)
+        return {
+            row["id"]: copy.deepcopy(row)
+            for row in self._scope.rows("copies")
+            if row["id"] in wanted
+        }
+
+    def export_records(self):
+        return copy.deepcopy(self._scope.rows("movies")), self.copies()
+
+    def insert_import(self, movies, copies):
+        # The enclosing store verifies the final document before publication.
+        movie_rows = self._scope.rows("movies", write=True)
+        copy_rows = self._scope.rows("copies", write=True)
+        prepared_movies, prepared_copies = copy.deepcopy(movies), copy.deepcopy(copies)
+        movie_rows.extend(prepared_movies)
+        copy_rows.extend(prepared_copies)
+
     def movies_by_ids(self, identities: list[str]) -> list[Record]:
         self._scope.check()
         if type(identities) is not list or len(identities) > 100:

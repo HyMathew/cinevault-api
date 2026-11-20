@@ -13,9 +13,9 @@ est exclu de leur représentation pour éviter de journaliser un bearer par déf
 
 ## Composition actuelle
 
-Les cinq opérations HTTP concernées ainsi que les nouveaux [services d'inscription
-et d'administration](account-services.md) utilisent `JsonPersistence`. Les domaines
-transfert, métadonnées et insights restent temporairement sur `V2Store` jusqu'à
+Les cinq opérations HTTP concernées, les [services d'inscription
+et d'administration](account-services.md) et le [transfert du catalogue](import-export-contract.md)
+utilisent `JsonPersistence`. Les domaines métadonnées et insights restent temporairement sur `V2Store` jusqu'à
 leur extraction. Les deux adaptateurs accèdent **au même fichier JSON et au même
 verrou** ; aucune donnée n’est dupliquée, aucun serveur MongoDB
 n’est sélectionné par la composition HTTP actuelle. Le service est utilisable

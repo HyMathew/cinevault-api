@@ -14,6 +14,7 @@ from .enterprise_auth import (
 )
 from .services.catalogue import CatalogueService
 from .services.catalogue_model import COPY_FIELDS, copy_data, etag, movie_data, resource
+from .services.catalogue_model import MOVIE_FIELDS as MOVIE_FIELDS
 from .services.catalogue_model import SUPPORTS as SUPPORTS
 from .services.copies import CopyService
 from .services.public_catalogue import PublicCatalogueService
@@ -21,7 +22,6 @@ from .validation import ValidationError
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
 bp.after_request(no_cache)
-MOVIE_FIELDS = ("title", "year", "director", "actors", "synopsis")
 
 
 def respond(entity, status=200, location=None):

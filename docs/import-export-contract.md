@@ -1,6 +1,6 @@
 # Import/export du catalogue
 
-Mode Enterprise. Gestionnaire ou administrateur uniquement ; identité et rôle actuels contrôlés sous le même verrou que l'opération. Le transfert porte exclusivement sur les métadonnées des films et leurs exemplaires partagés. Il exclut comptes, sessions, collections privées, prêts, réservations, audit et reçus. Les sauvegardes d'exploitation du document complet restent confidentielles et distinctes.
+Le transfert est ouvert aux gestionnaires et administrateurs en mode Enterprise. Il porte exclusivement sur les métadonnées des films et leurs exemplaires partagés. Les comptes, sessions, collections privées, prêts, réservations, audits et reçus restent hors du contenu transféré. Les sauvegardes d'exploitation du document complet restent confidentielles et distinctes.
 
 ## Contrat HTTP
 
@@ -37,7 +37,7 @@ Le fichier est intégralement normalisé avant préparation. Les doublons intern
 - `skip` : un film déjà présent et tous ses exemplaires entrants sont ignorés ; compteurs explicites. Aucun remplacement.
 - `append_copies` : métadonnées existantes strictement identiques exigées ; seuls les nouveaux exemplaires sont ajoutés. Une copie entrante d'identifiant déjà présent est ignorée seulement si son film et ses attributs sont identiques. Un identifiant absent crée un nouvel exemplaire, même si ses attributs ressemblent à une copie existante.
 
-Un film à clé naturelle déjà présente est associé au film existant ; un identifiant entrant différent mais non utilisé n'en remplace pas l'identifiant. Tout identifiant entrant déjà utilisé par une autre entité provoque un conflit.
+Un film est associé à l'unique film existant qui porte sa clé naturelle. Un identifiant entrant différent et libre ne remplace pas l'identifiant existant. Une clé naturelle portée par plusieurs films historiques provoque un conflit 409 pour toutes les politiques, y compris si le fichier contient un UUID. Le lot est refusé sans choisir un film ni modifier les doublons. Un UUID déjà utilisé par une autre entité provoque également un conflit pour toute création envisagée.
 
 Une copie complète du document est préparée sous verrou, puis seuls les tableaux films/exemplaires remplacent les anciens après réussite de tout le lot. Erreur de validation/conflit : aucun ajout métier partiel. Le journal d'échec et l'activité de session peuvent néanmoins être persistés. Les droits ne proviennent jamais du formulaire.
 
@@ -47,10 +47,18 @@ Fichier décodé de **1 Mio maximum**, 1 000 films et 5 000 exemplaires par lot.
 
 Clé d'opération liée à l'acteur, au type d'opération et à l'empreinte du corps canonique avec politique par défaut explicitée. Même contenu/même clé : résultat initial, sans nouvel ajout ni nouvel événement de succès, avec `Idempotency-Replayed: true`. Autre contenu ou autre type d'opération avec la même clé : 409. Garantie bornée à **24 h**, capacité 10 000 reçus. Répéter après expiration est une nouvelle opération ; `append_copies` peut alors créer d'autres copies sans identifiant. Aucun retry automatique. Le reçu conserve seulement identifiant d'opération et compteurs, jamais le fichier brut ni un secret.
 
-Audit minimal : acteur, date, identifiant d'opération, `import.completed`, `import.failed` ou `export.completed`. Rétention bornée aux 2 000 derniers événements. Les échecs sémantiques et conflits métier sont journalisés ; les rejets HTTP de syntaxe/taille/authentification et conflits de clé ne produisent pas un événement d'import distinct. Un export est journalisé dans sa transaction de lecture cohérente.
+L'audit conserve l'acteur, la date, l'identifiant d'opération et l'action `import.completed`, `import.failed` ou `export.completed`. La rétention couvre les 2 000 derniers événements. Un rejet sémantique ou un conflit de lot produit un événement d'échec. Un rejet HTTP de syntaxe, taille ou authentification et un conflit de clé ne créent pas d'événement d'import.
+
+## Service partagé
+
+Le contrôle initial d'autorité autorise la lecture du corps et sa préparation. Les identifiants et la date d'opération restent stables si la transaction doit être reprise. La transaction finale relit la session et le rôle, planifie les insertions avec les clés naturelles et les UUID concernés, puis valide ensemble le catalogue, la mise à jour de session, l'audit et le reçu. Les lots MongoDB utilisent des écritures groupées et une validation finale des films, exemplaires et références concernés. La recherche de clés naturelles retourne au plus deux résultats par clé pour détecter l'ambiguïté. [Opérateur MongoDB utilisé](https://www.mongodb.com/docs/manual/reference/operator/aggregation/firstN/).
+
+L'export lit films et exemplaires dans le même instantané que le contrôle d'autorité et l'audit. Les deux formats trient les films par UUID et les exemplaires par UUID au sein d'un film. Le catalogue est exporté en entier et peut dépasser les limites d'un seul import. La qualification locale vérifie les requêtes et les lots MongoDB avec un double du pilote. Les temps de transfert et l'exécution du service sur MongoDB restent à mesurer. Les routes HTTP utilisent actuellement JSON.
 
 ## Validation
 
 `tests/test_transfer.py` vérifie permissions, rejeu, lot invalide sans ajout partiel, conflits tardifs, collisions avec comptes, politiques, JSON/CSV, accents/virgules/guillemets/retours à la ligne, formules CSV, limites, schémas et refus de secrets dans les reçus. Deux processus indépendants avec la même clé produisent un film, une copie, un reçu et un événement de succès.
+
+`tests/test_transfer_services.py` couvre en plus les clés naturelles ambiguës, l'ordre canonique, le rejeu des anciens reçus, la révocation pendant la préparation et la stabilité après annulation. `tests/test_mongo_transfer_ports.py` vérifie le groupement et les références sur le double du pilote.
 
 La preuve Compose locale distincte vérifie le parcours HTTP multipart → web → API JSON → document et le redémarrage. Les tests web isolés utilisent une API simulée. Le contrôle visuel navigateur des nouveaux écrans et le déploiement distribué restent des validations séparées.
