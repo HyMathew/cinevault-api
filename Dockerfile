@@ -23,9 +23,10 @@ RUN pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements.txt && \
 FROM alpine:3.24@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71d8cd630a
 ENV PATH=/usr/local/bin:$PATH LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN apk add --no-cache --virtual .cinevault-runtime ca-certificates \
-    so:libbz2.so.1 so:libcrypto.so.3 so:libffi.so.8 so:libgdbm.so.6 \
+    libcrypto3=3.5.9-r1 libssl3=3.5.9-r1 \
+    so:libbz2.so.1 so:libffi.so.8 so:libgdbm.so.6 \
     so:libgdbm_compat.so.4 so:liblzma.so.5 so:libncursesw.so.6 so:libpanelw.so.6 \
-    so:libreadline.so.8 so:libssl.so.3 so:libuuid.so.1 zlib=1.4-r0 && \
+    so:libreadline.so.8 so:libuuid.so.1 zlib=1.4-r0 && \
     addgroup -S -g 10001 cinevault && adduser -S -D -u 10001 -G cinevault cinevault && \
     mkdir /data && chown 10001:10001 /data
 COPY --from=python-runtime /usr/local /usr/local

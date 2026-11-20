@@ -29,6 +29,14 @@ python scripts/check_image.py --image cinevault-api:local-audit
 
 Le script construit l’image, vérifie son utilisateur et une exécution en UID non nul, attend le véritable HEALTHCHECK puis exporte l’image par son identifiant immuable fourni dans un iidfile propre au build, sans relire un tag mutable. Le démarrage de contrôle utilise un réseau désactivé, une racine en lecture seule, aucune capacité additionnelle et un /tmp éphémère. C’est une vérification de démarrage legacy ; les parcours Enterprise entre les deux services nécessitent leur test d’intégration distinct.
 
+Le 20 novembre 2026, le scan du commit `d3e0b79` a bloqué quatre avis de
+sévérité élevée déclarés à la fois sur `libcrypto3` et `libssl3` en
+`3.5.9-r0`. Le Dockerfile exige désormais les deux paquets corrigés
+`3.5.9-r1` de la branche Alpine 3.24. Le contrôle conserve le même seuil
+de blocage et le rapport négatif reste associé à son exécution.
+[Scan de l'image précédente](https://github.com/HyMathew/cinevault-api/actions/runs/44749170691/job/136333946884).
+[Index des paquets Alpine](https://pkgs.alpinelinux.org/packages?arch=x86_64&branch=v3.24&name=openssl&repo=main).
+
 Grype 0.121.2 est exécuté depuis l’image officielle `anchore/grype` fixée au digest sha256:6a36234da13f9faa327306ac0b3dab3405cfa2b4eb20c8f904125a8707863913. Le scanner reçoit seulement une archive en lecture seule, sans socket Docker, dossier personnel ou clé hôte ; il télécharge sa base publique. La base et les temporaires du scanner utilisent un volume Docker Linux éphémère, en UID 65532. Un helper Python à base fixée au digest, sans réseau et avec la seule capacité CHOWN, prépare uniquement ce nouveau volume. Les noms uniques et deux labels de propriété sont revérifiés avant suppression. Les trois conteneurs de la tentative et ce volume sont nettoyés indépendamment, y compris après une expiration. Le rapport JSON conserve toutes les sévérités ; High/Critical ou une erreur technique font échouer le contrôle. Aucun avis n’est ignoré, aucune option ignore-unfixed. Une absence d’avis connu ne prouve pas l’absence de vulnérabilité.
 
 Une tentative invalide les anciens reçus avant lancement ; ses erreurs techniques restent enregistrées. Chaque scan possède son propre sous-dossier et un reçu final de nettoyage.
