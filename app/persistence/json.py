@@ -7,6 +7,7 @@ from ..storage_v2 import V2Store
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
 from .json_circulation import JsonCirculation
+from .json_insights import JsonInsights
 from .json_repositories import (
     JsonAccounts,
     JsonAttempts,
@@ -31,6 +32,12 @@ class _JsonWork:
         self._personal = JsonPersonal(self._scope)
         self._events = JsonEvents(self._scope)
         self._circulation = JsonCirculation(self._scope)
+        self._insights = JsonInsights(self._scope)
+
+    @property
+    def insights(self) -> JsonInsights:
+        self._scope.check()
+        return self._insights
 
     @property
     def circulation(self) -> JsonCirculation:

@@ -133,6 +133,55 @@ def test_empty_catalogue_statistics_and_recommendations(enterprise):
     assert result["recommendations"] == [] and result["personalized"] is False
 
 
+def test_insights_use_shared_persistence_without_document_route(enterprise, monkeypatch):
+    client, _ = enterprise
+    _, auth = account(client, "sharedinsights")
+    monkeypatch.delitem(client.application.extensions, "enterprise_store")
+    assert client.get("/api/v1/statistics", headers=auth).json["catalogue"]["movies"] == 0
+    assert client.get("/api/v1/recommendations", headers=auth).json["recommendations"] == []
+    assert client.get("/api/v1/statistics?scope=all", headers=auth).status_code == 403
+    assert client.get("/api/v1/recommendations?limit=99").status_code == 401
+
+
+def test_mongo_recommendation_reads_stock_only_for_ranked_movies(monkeypatch):
+    from uuid import UUID
+
+    from app.persistence.mongo_insights import MongoInsights
+    from app.persistence.mongo_model import encode_record
+
+    actor = str(UUID(int=100))
+    ranked = str(UUID(int=1))
+    repo = MongoInsights(type("Scope", (), {"check": lambda self: None})())
+    reads = []
+
+    def find(name, selector=None, projection=None):
+        reads.append((name, selector))
+        if name == "movies":
+            return [
+                encode_record(
+                    "movies",
+                    {**MOVIE, "id": str(UUID(int=i)), "title": f"Film {i:02}", "genres": []},
+                )
+                for i in range(1, 31)
+            ]
+        return []
+
+    def aggregate(name, pipeline):
+        reads.append((name, pipeline[0]["$match"]))
+        return []
+
+    monkeypatch.setattr(repo, "_find", find)
+    monkeypatch.setattr(repo, "_aggregate", aggregate)
+    result = repo.recommendations(actor, 1700000000, (), 1)
+    assert result["total"] == 30 and result["recommendations"][0]["movie"]["id"] == ranked
+    assert ("collections", {"owner_id": actor}) in reads
+    assert ("copies", {"movie_id": {"$in": [ranked]}}) in reads
+    assert (
+        "reservations",
+        {"status": "waiting", "expires_at": {"$gt": 1700000000}, "movie_id": {"$in": [ranked]}},
+    ) in reads
+
+
 def test_queue_hold_expiration_and_returned_history_are_derived(enterprise):
     from app.insights import recommendations, statistics
     from app.storage_v2 import V2Store

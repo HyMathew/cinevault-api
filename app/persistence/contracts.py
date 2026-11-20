@@ -141,7 +141,16 @@ class Circulation(ReadCirculation, Protocol):
     def save_reservation(self, reservation: Record, *, owner_id: str | None = None) -> None: ...
 
 
+class ReadInsights(Protocol):
+    def statistics(self, actor: str, timestamp: int, all_operations: bool) -> Record: ...
+    def recommendations(
+        self, actor: str, timestamp: int, genres: tuple[str, ...], limit: int
+    ) -> Record: ...
+
+
 class ReadWork(Protocol):
+    @property
+    def insights(self) -> ReadInsights: ...
     @property
     def circulation(self) -> ReadCirculation: ...
 
