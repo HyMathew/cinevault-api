@@ -5,6 +5,7 @@ import uuid
 from flask import Flask, jsonify, request, url_for
 from werkzeug.exceptions import BadRequest, HTTPException, UnsupportedMediaType
 
+from .persistence.factory import storage_backend
 from .repository import NotFound, Repository, StorageError, unique_pairs
 from .validation import ValidationError, validate
 
@@ -16,11 +17,16 @@ def create_app(config=None):
         MAX_CONTENT_LENGTH=65536,
         ENTERPRISE_ENABLED=os.environ.get("ENTERPRISE_ENABLED", "").lower() == "true",
         ENTERPRISE_DATA_FILE=os.environ.get("ENTERPRISE_DATA_FILE"),
+        STORAGE_BACKEND=os.environ.get("STORAGE_BACKEND", "json"),
+        MONGODB_URI_FILE=os.environ.get("MONGODB_URI_FILE"),
+        MONGODB_DATABASE=os.environ.get("MONGODB_DATABASE"),
+        REGISTRATION_ADMISSION_FILE=os.environ.get("REGISTRATION_ADMISSION_FILE"),
         AUTH_THROTTLE_KEY_FILE=os.environ.get("AUTH_THROTTLE_KEY_FILE"),
     )
     if config:
         app.config.update(config)
-    repo = Repository(app.config["DATA_FILE"])
+    backend = storage_backend(app.config)
+    repo = Repository(app.config["DATA_FILE"]) if backend == "json" else None
 
     def error(status, code, message, fields=None):
         body = {"code": code, "message": message}
@@ -31,16 +37,18 @@ def create_app(config=None):
     if app.config["ENTERPRISE_ENABLED"] is True:
         from .enterprise_auth import install_enterprise
 
-        install_enterprise(app)
+        install_enterprise(app, backend)
 
         @app.before_request
-        def block_legacy_mutation():
-            if (
-                request.path == "/api/films" or request.path.startswith("/api/films/")
-            ) and request.method not in ("GET", "HEAD", "OPTIONS"):
+        def restrict_legacy_routes():
+            if request.path != "/api/films" and not request.path.startswith("/api/films/"):
+                return None
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
                 return error(
                     403, "legacy_write_disabled", "Écriture legacy désactivée en mode Enterprise."
                 )
+            if backend == "mongodb" and request.method in ("GET", "HEAD"):
+                return error(410, "legacy_unavailable", "Utilisez le catalogue Enterprise.")
 
     @app.errorhandler(StorageError)
     def storage_error(exc):
@@ -90,11 +98,10 @@ def create_app(config=None):
     @app.get("/health")
     def health():
         if app.config["ENTERPRISE_ENABLED"] is True:
-            from .enterprise_auth import check_store
+            from .enterprise_auth import enterprise_health
 
-            check_store()
-        else:
-            repo.execute(lambda films: (None, False))
+            return enterprise_health()
+        repo.execute(lambda films: (None, False))
         return {"status": "ok"}
 
     @app.get("/api/films")

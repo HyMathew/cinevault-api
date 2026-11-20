@@ -42,7 +42,7 @@ def context(enterprise):
 def test_metadata_and_posters_use_active_persistence_without_document_store(enterprise):
     client, _, manager, _, provider = context(enterprise)
     app = client.application
-    del app.extensions["enterprise_store"]
+    assert "enterprise_store" not in app.extensions
     assert client.get("/api/v1/metadata/search?q=Metropolis", headers=manager).status_code == 200
     assert client.get("/api/v1/metadata/Q151599", headers=manager).status_code == 200
     assert client.get("/api/v1/posters?movie_id=00000000-0000-4000-8000-000000000001").json == {

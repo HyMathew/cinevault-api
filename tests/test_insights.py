@@ -133,10 +133,10 @@ def test_empty_catalogue_statistics_and_recommendations(enterprise):
     assert result["recommendations"] == [] and result["personalized"] is False
 
 
-def test_insights_use_shared_persistence_without_document_route(enterprise, monkeypatch):
+def test_insights_use_shared_persistence_without_document_route(enterprise):
     client, _ = enterprise
     _, auth = account(client, "sharedinsights")
-    monkeypatch.delitem(client.application.extensions, "enterprise_store")
+    assert "enterprise_store" not in client.application.extensions
     assert client.get("/api/v1/statistics", headers=auth).json["catalogue"]["movies"] == 0
     assert client.get("/api/v1/recommendations", headers=auth).json["recommendations"] == []
     assert client.get("/api/v1/statistics?scope=all", headers=auth).status_code == 403

@@ -20,8 +20,8 @@ class RegistrationBusy(Exception):
 
 
 class RegistrationAdmission:
-    def __init__(self, store_path):
-        self.path = Path(str(store_path) + ".registration.json")
+    def __init__(self, store_path, *, file_path=None):
+        self.path = Path(file_path) if file_path else Path(str(store_path) + ".registration.json")
         self.lock_path = str(self.path) + ".lock"
 
     def read(self, timestamp):

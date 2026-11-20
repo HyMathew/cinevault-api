@@ -5,10 +5,8 @@ disponibilité. Les routes transmettent des valeurs Python, puis rendent un
 `ServiceResult` après commit. Aucun accès Flask, PyMongo, réseau externe, horloge
 ou générateur aléatoire ne se trouve dans le callback métier réexécutable.
 
-Ce lot extrait la circulation ; il **n’active pas encore le backend Mongo pour
-toute l’API**. La composition HTTP courante conserve JSON tant que les autres
-routes documentaires ne sont pas extraites. Aucun fallback ni double écriture.
-Le backend JSON réel reste requis par RT0705.
+La circulation utilise le stockage Enterprise sélectionné pour toute l’API.
+Le mode JSON reste disponible pour RT0705. [Configuration du runtime](runtime.md).
 
 ## Autorité et contrôles
 

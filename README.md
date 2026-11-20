@@ -1,10 +1,14 @@
 # CineVault API
 
-API Flask du tiers données de CineVault. Deux modes explicites : le catalogue pédagogique legacy, sans authentification par défaut, et Enterprise opt-in avec comptes, catalogue partagé, exemplaires, collections privées et prêts. Le stockage principal reste JSON. TLS n'est pas fourni par l'application : ne pas exposer directement son port à un réseau non fiable. Le frontend y accède sur le réseau privé de l'application.
+API Flask du tiers données de CineVault. Deux modes explicites : le catalogue pédagogique legacy, sans authentification par défaut, et Enterprise opt-in avec comptes, catalogue partagé, exemplaires, collections privées et prêts. Le catalogue pédagogique utilise JSON. Enterprise sélectionne un seul stockage métier, JSON v2 ou MongoDB. TLS n'est pas fourni par l'application : ne pas exposer directement son port à un réseau non fiable. Le frontend y accède sur le réseau privé de l'application.
 
 ## Mode Enterprise
 
-Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 déjà initialisé ou migré, et `AUTH_THROTTLE_KEY_FILE` vers un fichier privé d'au moins 32 octets. Aucun fichier manquant n'est recréé silencieusement. Le premier administrateur se crée par l'outil local interactif `python -m app.bootstrap --store <chemin>` ; aucun compte ou secret prédéfini. Les mutations des routes legacy sont refusées dans ce mode ; les lectures legacy conservent leur fichier pédagogique distinct.
+Définir `ENTERPRISE_ENABLED=true` et `AUTH_THROTTLE_KEY_FILE` vers un fichier privé d'au moins 32 octets.
+
+- **JSON v2** par défaut. Fournir `ENTERPRISE_DATA_FILE` vers un document v2 initialisé ou migré. La commande interactive `python -m app.bootstrap --store <chemin>` crée le premier administrateur. Les lectures legacy gardent leur fichier pédagogique distinct.
+- **MongoDB** avec `STORAGE_BACKEND=mongodb`. Fournir `MONGODB_DATABASE`, `MONGODB_URI_FILE` et `REGISTRATION_ADMISSION_FILE` vers un fichier technique dédié. Retirer `ENTERPRISE_DATA_FILE` de la configuration. Les lectures legacy renvoient 410.
+- Les mutations legacy renvoient 403 en mode Enterprise. `/health` vérifie le stockage sélectionné. Une indisponibilité MongoDB renvoie 503 sans écrire en JSON. [Configuration du runtime](docs/runtime.md).
 
 - [Comptes et sessions](docs/auth-contract.md), [protections et limites](docs/accounts-milestone.md).
 - [Admission des opérations anonymes et contexte client signé](docs/auth-admission.md).
@@ -20,7 +24,7 @@ Définir `ENTERPRISE_ENABLED=true`, `ENTERPRISE_DATA_FILE` vers un document v2 d
 - [Métadonnées Wikidata/Commons, cache et affiches](docs/metadata-contract.md).
 - [Spécification OpenAPI](docs/openapi-v1.json), schéma de stockage sous `schemas/`.
 
-Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées sous le même verrou de transaction. Les appels externes sont effectués entre deux contrôles d'autorisation, hors verrou métier. Une seule réplique API détient ce fichier. Le projet reste en développement : contrôles navigateur complets, infrastructure distribuée et audit final restent à terminer.
+Les décisions d'autorisation, les versions et les règles d'intégrité sont vérifiées au sein de la transaction métier. Les appels externes sont effectués entre deux contrôles d'autorisation, hors transaction. En mode JSON, une seule réplique API détient le fichier. Le projet reste en développement : contrôles navigateur complets, infrastructure distribuée et audit final restent à terminer.
 
 ## Lancement et tests
 
@@ -51,7 +55,7 @@ Erreurs au format `{"error":{"code":"validation_error","message":"Données inval
 
 ## Stockage v2 et migration
 
-`app/storage_v2.py` et `app/migrate_v2.py` fournissent le document transactionnel versionné et sa migration. Les routes Enterprise sont raccordées à ce document ; le mode legacy conserve son fichier distinct et ses mutations ne sont permises que lorsque Enterprise est désactivé. Le schéma décrit comptes, sessions, compteurs anti-abus, films, exemplaires, collections, prêts, réservations, audit minimal et reçus de création d'exemplaire, d'import, de demande de prêt ou de réservation. Les autres opérations mémorisées restent refusées jusqu'à leur implémentation. La validation Python contrôle aussi UTF-8, unicité, références, transitions cohérentes et dates, propriétés que le schéma seul ne garantit pas. Les exemples par type restent à compléter avant l'audit académique final.
+`app/storage_v2.py` et `app/migrate_v2.py` fournissent le document transactionnel versionné et sa migration. L'adaptateur Enterprise JSON utilise ce document. Le catalogue legacy utilise son fichier distinct et ses mutations sont permises lorsque Enterprise est désactivé. Le schéma décrit comptes, sessions, compteurs anti-abus, films, exemplaires, collections, prêts, réservations, audit minimal et reçus de création d'exemplaire, d'import, de demande de prêt ou de réservation. Les autres opérations mémorisées restent refusées jusqu'à leur implémentation. La validation Python contrôle aussi UTF-8, unicité, références, transitions cohérentes et dates, propriétés que le schéma seul ne garantit pas. Les exemples par type restent à compléter avant l'audit académique final.
 
 `V2Store(path).initialize()` crée explicitement un document vierge sans écraser une cible. `read()` refuse un fichier manquant ou invalide. `transact(callback)` verrouille, lit, appelle le traitement, valide l'ensemble, incrémente la révision et remplace atomiquement le document ; une exception avant remplacement laisse l'ancien contenu. Le callback ne doit pas faire d'I/O externe ni retenir de référence mutable ; toute règle métier future et autorisation devra être vérifiée dans cette même transaction. Le stockage est à instance API unique sur un seul volume local ; aucune réplication ou haute disponibilité.
 
@@ -67,7 +71,6 @@ Les créations sans écrasement exigent la prise en charge des liens physiques s
 
 Les [services communs d'inscription et d'administration](docs/account-services.md)
 conservent l'admission avant Argon2, les droits actuels et les mutations atomiques.
-Leur extraction ne sélectionne pas encore Mongo pour toute l'API.
 
 Voir les [commandes, contrôles et limites](docs/quality.md). Les configurations de CI ne constituent pas une preuve d’exécution distante ; aucun badge de succès n’est ajouté avant un résultat GitHub réel.
 

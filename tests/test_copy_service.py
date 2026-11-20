@@ -323,11 +323,7 @@ def test_copy_http_service_boundary_and_original_authorization_parse_order(tmp_p
         return run(pure)
 
     monkeypatch.setattr(persistence, "run", observed)
-    monkeypatch.setattr(
-        client.application.extensions["enterprise_store"],
-        "transact",
-        lambda _: (_ for _ in ()).throw(AssertionError("Legacy mutation used")),
-    )
+    assert "enterprise_store" not in client.application.extensions
     assert client.post("/api/v1/copies", data="invalid").status_code == 401
     assert client.post("/api/v1/copies", headers=member, data="invalid").status_code == 403
     first = client.post(

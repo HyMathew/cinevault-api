@@ -18,13 +18,10 @@ def test_creation_keys_replay_initial_resources_and_share_actor_namespace(enterp
     assert conflict.status_code == 409 and conflict.json["error"]["code"] == "operation_conflict"
 
 
-def test_circulation_http_does_not_use_legacy_document_transaction(enterprise, monkeypatch):
+def test_circulation_http_does_not_use_legacy_document_transaction(enterprise):
     client, _, movie, _, _, owner, _ = setup_lending(enterprise)
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("Circulation still uses document business mutation")
-
-    monkeypatch.setattr(client.application.extensions["enterprise_store"], "transact", forbidden)
+    assert "enterprise_store" not in client.application.extensions
     response = client.post("/api/v1/loans", headers=owner, json={"movie_id": movie["id"]})
     assert response.status_code == 201
     assert client.get(response.headers["Location"], headers=owner).status_code == 200

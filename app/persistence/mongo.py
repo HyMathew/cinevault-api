@@ -95,6 +95,11 @@ class MongoPersistence:
         self._runner = TransactionRunner(database.client)
         self._execution = ExecutionGuard()
 
+    def close(self):
+        if self._owner_pid != getpid():
+            raise RuntimeError("MongoDB persistence must stay in its owning process")
+        self._database.client.close()
+
     def _execute(self, callback, *, writable):
         if self._owner_pid != getpid():
             raise RuntimeError("MongoDB persistence must stay in its owning process")

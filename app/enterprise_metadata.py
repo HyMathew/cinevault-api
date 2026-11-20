@@ -6,6 +6,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, request
 
 from .enterprise_auth import bearer, no_cache, now, run_service
+from .persistence.factory import file_and_lock, protected_file_paths
 from .services.metadata import MetadataService, metadata_problem, verified_detail
 from .wikimedia import WikimediaClient
 
@@ -55,19 +56,15 @@ def install_metadata(app):
         "METADATA_ENABLED", os.environ.get("METADATA_ENABLED", "").lower() == "true"
     )
     if enabled is True:
-        path = (
-            app.config.get("METADATA_CACHE_FILE")
-            or os.environ.get("METADATA_CACHE_FILE")
-            or str(Path(app.config["ENTERPRISE_DATA_FILE"]).with_name("metadata-cache.json"))
-        )
-        reserved = {
-            Path(str(value) + suffix).resolve()
-            for value in (app.config["ENTERPRISE_DATA_FILE"], app.config["DATA_FILE"])
-            for suffix in ("", ".lock")
-        }
+        path = app.config.get("METADATA_CACHE_FILE") or os.environ.get("METADATA_CACHE_FILE")
+        if not path:
+            business_path = app.config.get("ENTERPRISE_DATA_FILE")
+            if not business_path:
+                raise RuntimeError("MongoDB metadata requires a cache file")
+            path = Path(business_path).with_name("metadata-cache.json")
         admission = app.extensions["registration_admission"]
-        reserved.update(Path(value).resolve() for value in (admission.path, admission.lock_path))
-        if any(Path(str(path) + suffix).resolve() in reserved for suffix in ("", ".lock")):
+        reserved = protected_file_paths(app.config) | file_and_lock(admission.path)
+        if file_and_lock(path) & reserved:
             raise RuntimeError("Metadata cache must be separate from business files and locks")
         agent = app.config.get("WIKIMEDIA_USER_AGENT") or os.environ.get("WIKIMEDIA_USER_AGENT")
         try:

@@ -1,10 +1,37 @@
 # Image d'exécution
 
-Le Dockerfile construit un runtime spécialisé pour CineVault en deux étapes : Python 3.13 Alpine fixé au digest pour les dépendances Python, puis Alpine 3.24 fixé au digest pour l'image finale. Les bibliothèques natives sont installées par APK avec sa base de paquets réelle ; zlib est fixé à `1.4-r0`. Le module standard `sqlite3` et son extension native sont omis avant copie dans l'étape finale, et `sqlite-libs` n'y est jamais installé. CineVault conserve son stockage JSON ; cette image n'est pas un environnement Python général avec tous les modules optionnels.
+Le Dockerfile construit un runtime spécialisé pour CineVault en deux étapes : Python 3.13 Alpine fixé au digest pour les dépendances Python, puis Alpine 3.24 fixé au digest pour l'image finale. Les bibliothèques natives sont installées par APK avec sa base de paquets réelle ; zlib est fixé à `1.4-r0`. Le module standard `sqlite3` et son extension native sont omis avant copie dans l'étape finale, et `sqlite-libs` n'y est jamais installé. L’image prend en charge JSON et embarque le pilote PyMongo pur Python verrouillé pour MongoDB.
 
 Les dépendances applicatives sont exactes dans requirements.txt, avec installation par roues binaires seulement. Les bases sont fixées au digest ; les autres fournisseurs de bibliothèques APK ne sont pas tous fixés individuellement. Deux reconstructions à des dates différentes peuvent donc résoudre des révisions système différentes. Conserver l'identifiant de chaque image et son inventaire de scan, puis revalider avant distribution ; ne pas revendiquer une reproductibilité bit à bit.
 
 Le conteneur tourne en UID/GID 10001. Le fichier métier appartient au volume `/data`, les secrets sont injectés séparément. Les bibliothèques nécessaires à Argon2, au verrouillage, à HTTPS et à la compression restent disponibles. Les VM hôtes Ubuntu 24 restent distinctes du système de fichiers Alpine du conteneur.
+
+## Sélection du stockage en mode Enterprise
+
+`STORAGE_BACKEND=json` est la valeur par défaut. Fournir un `ENTERPRISE_DATA_FILE` v2
+existant. L'application vérifie le fichier au démarrage.
+
+Pour MongoDB, configurer `STORAGE_BACKEND=mongodb`, un `MONGODB_DATABASE` préprovisionné
+et un `MONGODB_URI_FILE` monté en lecture seule et lisible par l'UID 10001. Le
+fichier contient une URI standard `mongodb://` avec utilisateur, mot de passe,
+`authSource`, `authMechanism=SCRAM-SHA-256` et `replicaSet` explicites.
+`tls=true` avec validation des certificats est exigé, sauf pour une connexion de
+qualification à un seul hôte de boucle locale avec `directConnection=true`.
+Pour une autorité privée, monter sa CA et indiquer son chemin via `tlsCAFile`.
+L'identité applicative n'effectue aucune provision ni modification de schéma.
+
+Chaque worker construit et ferme son propre client. Démarrer Gunicorn sans
+`--preload`. La sonde `/health` exécute une lecture de coordination dans une
+transaction et renvoie 503 quand le stockage sélectionné est inaccessible.
+Elle vérifie la disponibilité applicative instantanée.
+
+`REGISTRATION_ADMISSION_FILE` est obligatoire en mode MongoDB. Les workers d'une
+même instance API doivent partager son fichier et son verrou sur un volume
+accessible en écriture. Lorsque les métadonnées sont activées, fournir aussi
+`METADATA_CACHE_FILE`. Ces chemins sont distincts des fichiers métier et des
+secrets. Ils contiennent respectivement les compteurs d'admission et le cache
+fournisseur. La migration et les opérations d'administration se font séparément
+du démarrage HTTP.
 
 ## Décision et validation locale
 

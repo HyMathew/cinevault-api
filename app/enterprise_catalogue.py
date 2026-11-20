@@ -1,64 +1,16 @@
 """Catalogue resources; entity versions prevent silent stale replacements."""
 
-from flask import Blueprint, current_app, jsonify, request, url_for
+from flask import Blueprint, current_app, request, url_for
 
-from .enterprise_auth import (
-    bearer,
-    error,
-    forbidden,
-    no_cache,
-    now,
-    payload,
-    protected,
-    run_service,
-)
+from .enterprise_auth import bearer, no_cache, now, payload, run_service
 from .services.catalogue import CatalogueService
-from .services.catalogue_model import COPY_FIELDS, copy_data, etag, movie_data, resource
+from .services.catalogue_model import COPY_FIELDS, copy_data, movie_data
 from .services.catalogue_model import MOVIE_FIELDS as MOVIE_FIELDS
-from .services.catalogue_model import SUPPORTS as SUPPORTS
 from .services.copies import CopyService
 from .services.public_catalogue import PublicCatalogueService
-from .validation import ValidationError
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
 bp.after_request(no_cache)
-
-
-def respond(entity, status=200, location=None):
-    response = jsonify(resource(entity))
-    response.status_code = status
-    response.headers["ETag"] = etag(entity)
-    if location:
-        response.headers["Location"] = location
-    return response
-
-
-def missing():
-    return error(404, "not_found", "Ressource introuvable.")
-
-
-def lookup(document, collection, identity):
-    return next((item for item in document[collection] if item["id"] == identity), None)
-
-
-def management(operation):
-    def action(document, user, session):
-        if user["role"] not in ("manager", "admin"):
-            return forbidden()
-        return operation(document, user)
-
-    return protected(action)
-
-
-def precondition(entity):
-    supplied = request.headers.get("If-Match")
-    if not supplied:
-        return error(428, "version_required", "La version de la ressource est requise.")
-    if supplied != etag(entity):
-        return error(
-            412, "stale_version", "Cette ressource a changé. Rechargez-la avant de réessayer."
-        )
-    return None
 
 
 def catalogue_service():
@@ -101,16 +53,6 @@ def prepare_movie(optional, movie_id=None):
                 "retrieved_at": film["retrieved_at"],
             }
     return {"attributes": attributes, "initial_copy": initial}
-
-
-def bounded_integer(name, default, lower, upper):
-    try:
-        value = int(request.args.get(name, default))
-        if not lower <= value <= upper:
-            raise ValueError()
-        return value
-    except ValueError:
-        raise ValidationError({name: "Valeur invalide."})
 
 
 @bp.get("/movies")

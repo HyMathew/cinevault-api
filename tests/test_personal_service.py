@@ -461,11 +461,8 @@ def test_personal_http_uses_pure_services_and_preserves_authorization_parse_orde
 
         return original(pure)
 
-    def legacy(*args, **kwargs):
-        raise AssertionError("Private endpoint used the legacy document mutation")
-
     monkeypatch.setattr(app.extensions["enterprise_persistence"], "run", observed)
-    monkeypatch.setattr(app.extensions["enterprise_store"], "transact", legacy)
+    assert "enterprise_store" not in app.extensions
     assert client.post("/api/v1/collections", data="broken").status_code == 401
     assert client.get("/api/v1/collections?unknown=x").status_code == 401
     assert client.get("/api/v1/audit-events?unknown=x", headers=headers["owner"]).status_code == 403

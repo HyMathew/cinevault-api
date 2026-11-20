@@ -3,8 +3,8 @@
 `PersonalCollectionService` porte les cinq routes collections et la lecture admin
 du journal. Les contrôleurs transmettent des arguments Python et rendent les
 `ServiceResult` après commit ; ni Flask ni PyMongo n’entrent dans le service.
-La composition HTTP sélectionne toujours JSON, sur le même fichier et verrou que
-les domaines legacy. Ce lot n’active pas le backend Mongo global.
+Les collections privées et le journal utilisent le stockage Enterprise
+sélectionné au démarrage. [Configuration du runtime](runtime.md).
 
 ## Autorité, propriété et pagination
 

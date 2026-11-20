@@ -33,11 +33,9 @@ rôle, de propriétaire, de dernière identité admin, d'expiration et de transi
 restent à extraire dans les services communs ; les repositories ne les remplacent
 pas. Les formes/reférences JSON sont encore validées intégralement au commit.
 
-La première interface ne contient que les opérations utilisées par les prochains
-lots comptes/catalogue. Circulation, listes privées, reçus, audit et admission
-seront ajoutés avec leur contrat propre. La sélection exclusive du moteur attend
-la conversion de tous les consommateurs ; aucune route n'écrit déjà une seconde
-source en parallèle.
+L’API associe tous les services Enterprise à un seul adaptateur au démarrage.
+Les scénarios de qualification Mongo et de basculement utilisent une base
+isolée. [Configuration du runtime](runtime.md).
 
 ## Runner MongoDB
 

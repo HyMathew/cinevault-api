@@ -347,8 +347,7 @@ def test_public_http_uses_query_ports_without_legacy_read_or_mutation(tmp_path, 
 
     monkeypatch.setattr(app.extensions["enterprise_persistence"], "query", query)
     monkeypatch.setattr(app.extensions["enterprise_persistence"], "run", forbidden)
-    monkeypatch.setattr(app.extensions["enterprise_store"], "read", forbidden)
-    monkeypatch.setattr(app.extensions["enterprise_store"], "transact", forbidden)
+    assert "enterprise_store" not in app.extensions
     client = app.test_client()
     before = path.read_bytes()
     assert client.get("/api/v1/movies", query_string={"q": "strasse"}).json["total"] == 2

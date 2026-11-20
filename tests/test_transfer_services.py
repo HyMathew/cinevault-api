@@ -43,7 +43,7 @@ def test_ambiguous_legacy_key_is_a_conflict_without_copy_or_receipt(enterprise, 
 
 def test_catalogue_transfer_requires_only_the_shared_persistence(enterprise):
     client, _, manager, _ = context(enterprise)
-    client.application.extensions.pop("enterprise_store")
+    assert "enterprise_store" not in client.application.extensions
     response = client.post(
         "/api/v1/catalogue/import", headers={**manager, "Idempotency-Key": KEY}, json=batch()
     )
