@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
+from ..recovery_clock import activity_after
 from ..storage_v2 import V2Store
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
@@ -33,6 +34,9 @@ class _JsonWork:
         self._events = JsonEvents(self._scope)
         self._circulation = JsonCirculation(self._scope)
         self._insights = JsonInsights(self._scope)
+
+    def has_activity_after(self, timestamp: int) -> bool:
+        return activity_after(self._scope.rows, timestamp)
 
     @property
     def insights(self) -> JsonInsights:
@@ -89,8 +93,8 @@ class _JsonWork:
 
 
 class JsonPersistence:
-    def __init__(self, path: str | Path):
-        self._store = V2Store(path)
+    def __init__(self, path: str | Path | V2Store):
+        self._store = path if isinstance(path, V2Store) else V2Store(path)
         self._execution = ExecutionGuard()
 
     def run(self, command: Callable[[Work], T]) -> T:

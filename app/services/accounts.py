@@ -2,7 +2,9 @@
 
 import uuid
 
+from ..auth_storage import ACCOUNT_CAPACITY
 from ..circulation_model import payload
+from ..personal_model import make_event
 from ..validation import ValidationError
 from .authentication import (
     authenticated,
@@ -16,10 +18,22 @@ from .circulation import cancel_disabled_in_work
 from .results import ServiceResult, failure
 
 
+def new_account(username, display_name, password_hash, role, timestamp):
+    return {
+        "id": str(uuid.uuid4()),
+        "username": username,
+        "display_name": display_name,
+        "password_hash": password_hash,
+        "role": role,
+        "enabled": True,
+        "created_at": timestamp,
+    }
+
+
 def registration_problem(accounts, username):
     if accounts.by_username(username) is not None:
         return failure(409, "conflict", "Identifiant indisponible.")
-    if accounts.count() >= 10000:
+    if accounts.count() >= ACCOUNT_CAPACITY:
         return failure(503, "registration_capacity", "Inscription temporairement indisponible.")
     return None
 
@@ -47,15 +61,7 @@ class RegistrationService:
             return problem
         # Admission and expensive crypto happen once, without a business UoW.
         # Only the prepared account below is captured by a retryable command.
-        account = {
-            "id": str(uuid.uuid4()),
-            "username": username,
-            "display_name": display_name,
-            "password_hash": prepare_hash(password),
-            "role": "member",
-            "enabled": True,
-            "created_at": timestamp,
-        }
+        account = new_account(username, display_name, prepare_hash(password), "member", timestamp)
 
         def add(work):
             problem = registration_problem(work.accounts, username)
@@ -65,6 +71,72 @@ class RegistrationService:
             return ServiceResult(201, body=public_profile(account))
 
         return self._persistence.run(add)
+
+
+class OperatorAccountService:
+    def __init__(self, persistence):
+        self._persistence = persistence
+
+    def bootstrap(self, username, display_name, password, *, timestamp, prepare_hash):
+        username = normalize_username(username)
+        if not username or not valid_display(display_name) or not valid_password(password):
+            raise ValueError("Invalid account fields")
+
+        def check(work):
+            if work.accounts.has_admin():
+                raise ValueError("An administrator already exists")
+            if work.accounts.by_username(username) is not None:
+                raise ValueError("Username unavailable")
+            if work.accounts.count() >= ACCOUNT_CAPACITY:
+                raise ValueError("Account storage limit exceeded")
+
+        self._persistence.query(check)
+        account = new_account(username, display_name, prepare_hash(password), "admin", timestamp)
+
+        def add(work):
+            check(work)
+            work.accounts.insert(account)
+            return public_profile(account)
+
+        return self._persistence.run(add)
+
+    def reset_password(self, operator, username, password, *, enable, timestamp, prepare_hash):
+        operator, username = normalize_username(operator), normalize_username(username)
+        if not operator or not username or not valid_password(password) or type(enable) is not bool:
+            raise ValueError("Invalid reset fields")
+        if type(timestamp) is not int or timestamp < 0:
+            raise ValueError("Recovery clock precedes stored events")
+
+        def subjects(work):
+            actor = work.accounts.by_username(operator)
+            user = work.accounts.by_username(username)
+            if actor is None or not actor["enabled"] or actor["role"] != "admin" or user is None:
+                raise ValueError("Invalid account or operator")
+            if work.has_activity_after(timestamp):
+                raise ValueError("Recovery clock precedes stored events")
+            return actor, user
+
+        def preflight(work):
+            subjects(work)
+
+        self._persistence.query(preflight)
+        password_hash = prepare_hash(password)
+        event_id = str(uuid.uuid4())
+
+        def reset(work):
+            actor, user = subjects(work)
+            user["password_hash"] = password_hash
+            if enable:
+                user["enabled"] = True
+            work.accounts.save(user)
+            work.sessions.revoke_user(user["id"])
+            work.events.append(
+                make_event(
+                    event_id, actor["id"], "recovery", user["id"], "password_reset", timestamp
+                )
+            )
+
+        self._persistence.run(reset)
 
 
 class AdminAccountService:

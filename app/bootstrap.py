@@ -1,55 +1,59 @@
 """Explicit local first-administrator creation; no default credentials."""
 
-import argparse
-import getpass
-import sys
 import time
 
-from .enterprise_auth import (
-    make_user,
-    normalize_username,
-    public_profile,
-    valid_display,
-    valid_password,
+import portalocker
+
+from .account_cli import (
+    OperatorArgumentParser,
+    add_store_arguments,
+    hidden_input,
+    open_operator_store,
+    require_interactive,
+    validate_store_arguments,
 )
+from .enterprise_auth import hasher
+from .persistence.errors import CommitOutcomeUnknown
+from .persistence.json import JsonPersistence
+from .services.accounts import OperatorAccountService
 from .storage_v2 import V2Store
 
 
-def bootstrap_admin(store, username, display_name, password):
-    username = normalize_username(username)
-    if not username or not valid_display(display_name) or not valid_password(password):
-        raise ValueError("Invalid account fields")
-    user = make_user(username, display_name, password, "admin", int(time.time()))
-
-    def add(document):
-        if any(u["role"] == "admin" for u in document["users"]):
-            raise ValueError("An administrator already exists")
-        if any(u["username"] == username for u in document["users"]):
-            raise ValueError("Username unavailable")
-        document["users"].append(user)
-        return public_profile(user)
-
-    return store.transact(add)
+def bootstrap_admin(store, username, display_name, password, *, timestamp=None):
+    if isinstance(store, V2Store):
+        store = JsonPersistence(store)
+    return OperatorAccountService(store).bootstrap(
+        username,
+        display_name,
+        password,
+        timestamp=int(time.time()) if timestamp is None else timestamp,
+        prepare_hash=hasher.hash,
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Create the first administrator in an existing v2 store."
+    parser = OperatorArgumentParser(
+        description="Create the first administrator in an existing Enterprise store."
     )
-    parser.add_argument("--store", required=True)
+    add_store_arguments(parser)
     args = parser.parse_args()
-    if not sys.stdin.isatty() or not sys.stderr.isatty():
-        parser.error("An interactive terminal is required; credentials cannot be piped.")
-    username = input("Username: ")
-    display_name = input("Display name: ")
-    password = getpass.getpass("Password: ")
-    confirmation = getpass.getpass("Confirm password: ")
-    if password != confirmation:
-        parser.exit(1, "Passwords do not match.\n")
+    validate_store_arguments(parser, args)
+    require_interactive(parser)
     try:
-        bootstrap_admin(V2Store(args.store), username, display_name, password)
-    except (ValueError, OSError):
-        parser.exit(1, "Administrator not created. Check the store and account policy.\n")
+        username = input("Username: ")
+        display_name = input("Display name: ")
+        password = hidden_input("Password: ")
+        confirmation = hidden_input("Confirm password: ")
+        if password != confirmation:
+            parser.exit(1, "Passwords do not match.\n")
+        with open_operator_store(args) as persistence:
+            bootstrap_admin(persistence, username, display_name, password)
+    except (EOFError, KeyboardInterrupt):
+        parser.exit(1, "Administrator creation cancelled.\n")
+    except CommitOutcomeUnknown:
+        parser.exit(1, "Administrator creation outcome is uncertain. Verify before retrying.\n")
+    except (ValueError, OSError, RuntimeError, portalocker.exceptions.LockException):
+        parser.exit(1, "Administrator creation failed. Verify the store before retrying.\n")
     print("Administrator created.")
 
 

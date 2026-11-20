@@ -137,6 +137,9 @@ class JsonAccounts(_Repository):
         rows = sorted(self._scope.rows("users"), key=lambda row: row["username"])
         return copy.deepcopy(rows[offset : offset + limit])
 
+    def has_admin(self) -> bool:
+        return any(row["role"] == "admin" for row in self._scope.rows("users"))
+
     def has_other_enabled_admin(self, identity: str) -> bool:
         self._scope.check()
         _identity(identity)

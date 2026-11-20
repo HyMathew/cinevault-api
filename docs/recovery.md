@@ -34,6 +34,21 @@ Sans `--enable`, le statut du compte reste inchangé ; avec ce drapeau, le compt
 
 Le nouveau chemin doit être configuré explicitement dans `ENTERPRISE_DATA_FILE`, avec une seule réplique API et le bon volume local. Le fichier de reprise est créé par lien atomique sans remplacement ; une cible existante, y compris une création concurrente, provoque un refus. Une panne après création du lien mais avant synchronisation du répertoire peut retourner une erreur alors que la cible existe déjà : conserver le fichier, vérifier son schéma et son empreinte, puis décider de sa mise en service. Ne jamais répéter en écrasant la cible.
 
+## Comptes en mode MongoDB
+
+Les deux commandes de gestion des comptes acceptent une base Enterprise MongoDB déjà provisionnée. Lancer les commandes depuis un terminal interactif, sous contrôle du compte d'exploitation, avec les autres écrivains arrêtés. Sélectionner le moteur MongoDB et la base applicative explicitement.
+
+```console
+python -m app.bootstrap --storage-backend mongodb --mongo-uri-file /run/secrets/mongodb_uri --mongo-database cinevault
+python -m app.recovery reset-password --storage-backend mongodb --mongo-uri-file /run/secrets/mongodb_uri --mongo-database cinevault --operator <administrateur-actif> --username <compte-verifie> --enable
+```
+
+Le fichier contient l'URI privée avec accès à un replica set, authentification SCRAM-SHA-256 et TLS vérifié pour les connexions distantes. Maintenir ses permissions privées et le fournir uniquement au compte d'exploitation habilité sur la base. Le mot de passe du compte CineVault est toujours saisi en mode masqué. Pour le moteur JSON, la commande historique `python -m app.bootstrap --store /data/catalogue.json` reste disponible.
+
+La création du premier administrateur est refusée dès qu'un compte possède ce rôle, y compris si son compte est désactivé, ou si la limite de 10 000 comptes est atteinte. Le reset exige un administrateur actif. Le nouveau hachage, la révocation des sessions du compte ciblé et l'événement d'audit sont écrits dans une seule transaction. Si la commande signale un résultat incertain, vérifier l'état de la base avant de répéter l'opération.
+
+La restauration d'instantané `app.recovery restore` est réservée aux instantanés JSON. À 10 000 comptes dans l'instantané, aucun candidat ne peut être créé avec un administrateur de reprise supplémentaire dans la limite actuelle. Une procédure complète de restauration MongoDB avec mise en quarantaine des comptes reste à valider.
+
 ## Portée de la validation
 
 Les tests unitaires/applicatifs utilisent de vrais fichiers et clients Flask ; le test multiprocessus crée exactement une cible validée et un événement de reprise. L'intégration Compose distincte prend un instantané, arrête l'API, restaure un nouveau fichier, redémarre avec ce chemin et vérifie les accès par HTTP. Les identifiants et données de cette démonstration sont synthétiques. Cette preuve locale ne démontre pas une bascule Swarm distante, ni un RTO/RPO mesuré sur une panne réelle du laboratoire.

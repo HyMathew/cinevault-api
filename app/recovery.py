@@ -1,46 +1,40 @@
 """Offline, no-clobber recovery with account quarantine and fresh credentials."""
 
-import argparse
-import getpass
 import hashlib
 import hmac
 import json
 import re
 import secrets
-import sys
 import time
 import uuid
 from pathlib import Path
 
 import portalocker
 
-from .audit import record_event
-from .enterprise_auth import hasher, make_user, normalize_username, valid_display, valid_password
-from .storage_v2 import V2Store, _encode, _write_new, decode_document, validate_document
-
-TIMES = (
-    "created_at",
-    "last_seen",
-    "requested_at",
-    "approved_at",
-    "returned_at",
-    "cancelled_at",
-    "closed_at",
-    "timestamp",
+from .account_cli import (
+    OperatorArgumentParser,
+    add_store_arguments,
+    hidden_input,
+    open_operator_store,
+    require_interactive,
+    validate_store_arguments,
 )
+from .audit import record_event
+from .auth_storage import ACCOUNT_CAPACITY
+from .enterprise_auth import hasher, make_user
+from .persistence.errors import CommitOutcomeUnknown
+from .persistence.json import JsonPersistence
+from .recovery_clock import activity_after
+from .services.accounts import OperatorAccountService
+from .services.authentication import normalize_username, valid_display, valid_password
+from .storage_v2 import V2Store, _encode, _write_new, decode_document, validate_document
 
 
 def check_clock(document, timestamp):
     if (
         type(timestamp) is not int
         or timestamp < 0
-        or any(
-            type(entry.get(key)) is int and entry[key] > timestamp
-            for collection in document.values()
-            if isinstance(collection, list)
-            for entry in collection
-            for key in TIMES
-        )
+        or activity_after(document.__getitem__, timestamp)
     ):
         raise ValueError("Recovery clock precedes stored events")
 
@@ -69,6 +63,8 @@ def recover(snapshot, target, expected_sha256, username, display_name, password,
         or any(u["username"] == username for u in document["users"])
     ):
         raise ValueError("Invalid recovery administrator")
+    if len(document["users"]) >= ACCOUNT_CAPACITY:
+        raise ValueError("Account storage limit exceeded")
     admin = make_user(username, display_name, password, "admin", timestamp)
     report = {
         "operation_id": str(uuid.uuid4()),
@@ -112,45 +108,27 @@ def recover(snapshot, target, expected_sha256, username, display_name, password,
 
 
 def reset_password(store, operator, username, password, *, enable=False, timestamp=None):
-    operator, username = normalize_username(operator), normalize_username(username)
-    if not operator or not username or not valid_password(password) or type(enable) is not bool:
-        raise ValueError("Invalid reset fields")
-    password_hash = hasher.hash(password)
-    timestamp = int(time.time()) if timestamp is None else timestamp
-
-    def reset(document):
-        check_clock(document, timestamp)
-        actor = next(
-            (
-                u
-                for u in document["users"]
-                if u["username"] == operator and u["enabled"] and u["role"] == "admin"
-            ),
-            None,
-        )
-        user = next((u for u in document["users"] if u["username"] == username), None)
-        if actor is None or user is None:
-            raise ValueError("Invalid account or operator")
-        user["password_hash"] = password_hash
-        if enable:
-            user["enabled"] = True
-        document["sessions"][:] = [s for s in document["sessions"] if s["user_id"] != user["id"]]
-        record_event(
-            document, actor["id"], "recovery", user["id"], "password_reset", timestamp=timestamp
-        )
-
-    store.transact(reset)
+    if isinstance(store, V2Store):
+        store = JsonPersistence(store)
+    OperatorAccountService(store).reset_password(
+        operator,
+        username,
+        password,
+        enable=enable,
+        timestamp=int(time.time()) if timestamp is None else timestamp,
+        prepare_hash=hasher.hash,
+    )
 
 
 def read_password():
-    password = getpass.getpass("New password: ")
-    if password != getpass.getpass("Confirm new password: ") or not valid_password(password):
+    password = hidden_input("New password: ")
+    if password != hidden_input("Confirm new password: ") or not valid_password(password):
         raise ValueError("Password policy or confirmation failed")
     return password
 
 
 def main():
-    parser = argparse.ArgumentParser(
+    parser = OperatorArgumentParser(
         description="Offline recovery; keep API stopped and preserve the old volume."
     )
     commands = parser.add_subparsers(dest="command", required=True)
@@ -159,13 +137,14 @@ def main():
     restore.add_argument("--target", required=True)
     restore.add_argument("--sha256", required=True)
     reset = commands.add_parser("reset-password")
-    reset.add_argument("--store", required=True)
+    add_store_arguments(reset)
     reset.add_argument("--operator", required=True)
     reset.add_argument("--username", required=True)
     reset.add_argument("--enable", action="store_true")
     args = parser.parse_args()
-    if not sys.stdin.isatty() or not sys.stderr.isatty():
-        parser.error("An interactive terminal is required; credentials cannot be piped.")
+    if args.command == "reset-password":
+        validate_store_arguments(reset, args)
+    require_interactive(parser)
     try:
         if args.command == "restore":
             if Path(args.target).exists():
@@ -178,21 +157,25 @@ def main():
             )
             print(json.dumps(report, sort_keys=True))
         else:
-            reset_password(
-                V2Store(args.store),
-                args.operator,
-                args.username,
-                read_password(),
-                enable=args.enable,
-            )
+            password = read_password()
+            with open_operator_store(args) as persistence:
+                reset_password(
+                    persistence,
+                    args.operator,
+                    args.username,
+                    password,
+                    enable=args.enable,
+                )
             print(
                 "Password reset; existing sessions revoked. Account enabled only if explicitly requested."
             )
     except (EOFError, KeyboardInterrupt):
         parser.exit(1, "Recovery operation cancelled.\n")
-    except (ValueError, OSError, portalocker.exceptions.LockException):
+    except CommitOutcomeUnknown:
+        parser.exit(1, "Password reset outcome is uncertain. Verify before retrying.\n")
+    except (ValueError, OSError, RuntimeError, portalocker.exceptions.LockException):
         parser.exit(
-            1, "Recovery operation failed. Inspect the archive, target and clock before retrying.\n"
+            1, "Recovery operation failed. Inspect the storage and clock before retrying.\n"
         )
 
 

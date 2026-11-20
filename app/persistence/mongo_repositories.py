@@ -335,6 +335,9 @@ class MongoAccounts(_Repository):
         with cursor.sort("username", 1).skip(offset).limit(limit):
             return [decode_record("users", record) for record in cursor]
 
+    def has_admin(self) -> bool:
+        return self._scope.find("users", {"role": "admin"}, {"_id": 1}) is not None
+
     def has_other_enabled_admin(self, identity: str) -> bool:
         self._scope.check()
         _identity(identity)

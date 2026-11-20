@@ -6,6 +6,7 @@ from os import getpid
 from bson import Int64
 from pymongo import ReturnDocument
 
+from ..recovery_clock import ACTIVITY_FIELDS
 from .contracts import ReadWork, T, Work
 from .execution import ExecutionGuard
 from .mongo_circulation import MongoCirculation
@@ -20,6 +21,7 @@ from .mongo_repositories import (
     MongoReceipts,
     MongoSessions,
     _MongoScope,
+    _timestamp,
 )
 from .mongo_transactions import TransactionRunner
 
@@ -36,6 +38,16 @@ class _MongoWork:
         self._events = MongoEvents(scope)
         self._circulation = MongoCirculation(scope)
         self._insights = MongoInsights(scope)
+
+    def has_activity_after(self, timestamp: int) -> bool:
+        _timestamp(timestamp)
+        return any(
+            self._scope.find(
+                name, {"$or": [{field: {"$gt": Int64(timestamp)}} for field in fields]}, {"_id": 1}
+            )
+            is not None
+            for name, fields in ACTIVITY_FIELDS.items()
+        )
 
     @property
     def insights(self) -> MongoInsights:
