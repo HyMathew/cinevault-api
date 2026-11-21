@@ -8,6 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from scripts.image_archive import SCANNER
+from tests.test_image_archive import digest, encoded, scan_report
+
 REVISION = "a" * 40
 IMAGE_ID = "sha256:" + "b" * 64
 DIGEST = "sha256:" + "c" * 64
@@ -41,15 +44,37 @@ def setup_context(tmp_path, monkeypatch):
         monkeypatch.setenv(name, value)
     reports = tmp_path / "reports"
     reports.mkdir()
+    attempt = reports / ("image-" + "f" * 32)
+    attempt.mkdir()
+    config = b'{"architecture":"amd64","os":"linux"}'
+    report = scan_report(config)
+    report["matches"] = [{"vulnerability": {"severity": "Medium"}}] * 5 + [
+        {"vulnerability": {"severity": "Low"}}
+    ]
+    raw = encoded(report)
+    (attempt / "image-vulnerabilities.json").write_bytes(raw)
     gate = {
         "image": "cinevault-api:ci-" + REVISION,
         "image_id": IMAGE_ID,
+        "attempt_directory": attempt.name,
         "health_passed": True,
         "scan_passed": True,
         "cleanup_passed": True,
+        "scanner": SCANNER,
         "scanner_version": "0.121.2",
         "scanner_exit_code": 0,
         "severity_counts": {"Medium": 5, "Low": 1},
+        "database": report["descriptor"]["db"],
+        "scan_provenance": {
+            "docker_image_id": IMAGE_ID,
+            "archive_identity_kind": "oci-index",
+            "archive_sha256": digest(b"scanned synthetic tar"),
+            "archive_config_digest": digest(config),
+            "archive_oci_manifest_digest": digest(b"original OCI manifest"),
+            "scan_report_sha256": digest(raw),
+            "grype_config_digest": digest(config),
+            "grype_manifest_digest": report["source"]["target"]["manifestDigest"],
+        },
     }
     (reports / "image-check.json").write_text(json.dumps(gate), encoding="utf-8")
     return gate
@@ -89,6 +114,8 @@ def fake_docker(monkeypatch, module, calls, *, observed=IMAGE_ID, fail_push=Fals
         {"image": "cinevault-api:ci-" + "d" * 40},
         {"image_id": "mutable-tag"},
         {"scanner_version": "unknown"},
+        {"scan_provenance": None},
+        {"attempt_directory": "../outside"},
     ],
 )
 def test_invalid_gate_refuses_before_registry_credentials(tmp_path, monkeypatch, changes):
@@ -131,6 +158,41 @@ def test_changed_local_tag_is_rejected_before_login(tmp_path, monkeypatch):
     assert len(calls) == 1 and calls[0][0][1:3] == ["image", "inspect"]
 
 
+@pytest.mark.parametrize(
+    "defect",
+    ["report_bytes", "report_missing", "report_severity", "config", "identity", "archive_digest"],
+)
+def test_scan_provenance_mismatch_refuses_before_login(tmp_path, monkeypatch, defect):
+    module = publisher()
+    gate = setup_context(tmp_path, monkeypatch)
+    reports = tmp_path / "reports"
+    report_path = reports / gate["attempt_directory"] / "image-vulnerabilities.json"
+    provenance = gate["scan_provenance"]
+    if defect == "report_bytes":
+        report_path.write_bytes(report_path.read_bytes() + b"\n")
+    if defect == "report_missing":
+        report_path.unlink()
+    if defect == "report_severity":
+        report = json.loads(report_path.read_bytes())
+        report["matches"][0]["vulnerability"]["severity"] = "High"
+        raw = encoded(report)
+        report_path.write_bytes(raw)
+        provenance["scan_report_sha256"] = digest(raw)
+    if defect == "config":
+        provenance["archive_config_digest"] = digest(b"wrong config")
+        provenance["grype_config_digest"] = provenance["archive_config_digest"]
+    if defect == "identity":
+        provenance["docker_image_id"] = digest(b"wrong Docker image")
+    if defect == "archive_digest":
+        provenance["archive_sha256"] = "not-a-digest"
+    (reports / "image-check.json").write_text(json.dumps(gate), encoding="utf-8")
+    calls = []
+    fake_docker(monkeypatch, module, calls)
+    with pytest.raises((ValueError, OSError, RuntimeError)):
+        module.publish(tmp_path, "Example", TOKEN)
+    assert not calls
+
+
 def test_push_uses_exact_gated_id_and_destroys_private_docker_config(tmp_path, monkeypatch):
     module = publisher()
     setup_context(tmp_path, monkeypatch)
@@ -142,6 +204,7 @@ def test_push_uses_exact_gated_id_and_destroys_private_docker_config(tmp_path, m
     assert result["published"] is True
     assert result["registry_ref"] == "ghcr.io/example/cinevault-api@" + DIGEST
     assert result["source_commit"] == REVISION
+    assert result["scan_provenance"]["docker_image_id"] == IMAGE_ID
     configuration = next(kw["env"]["DOCKER_CONFIG"] for args, kw in calls if args[1] == "login")
     assert not Path(configuration).exists()
 

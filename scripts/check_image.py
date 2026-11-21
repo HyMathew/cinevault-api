@@ -9,13 +9,15 @@ import subprocess
 import tempfile
 import time
 import uuid
-from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCANNER = (
-    "anchore/grype:v0.121.2@sha256:6a36234da13f9faa327306ac0b3dab3405cfa2b4eb20c8f904125a8707863913"
-)
+if __package__:
+    from . import image_archive
+else:
+    import image_archive
+
+SCANNER = image_archive.SCANNER
 CACHE_HELPER = (
     "python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc"
 )
@@ -104,6 +106,29 @@ def export_image_archive(identity, archive):
     # Linux bind mounts preserve the host mode. The parent stays private;
     # only this exported file is readable by the unprivileged scanner.
     archive.chmod(0o444)
+
+
+def record_scan(receipt, reports, archive, archive_evidence, scan):
+    (reports / image_archive.REPORT_NAME).write_bytes(scan.stdout)
+    (reports / "image-scan.log").write_bytes(scan.stderr)
+    receipt["scanner_exit_code"] = scan.returncode
+    if image_archive.archive_sha256(archive) != archive_evidence["archive_sha256"]:
+        raise ValueError("Docker archive changed during the vulnerability scan")
+    report, scan_evidence = image_archive.inspect_scan_report(
+        scan.stdout, archive_evidence["archive_config_digest"]
+    )
+    receipt.update(
+        image_archive.scan_result(report), scan_provenance={**archive_evidence, **scan_evidence}
+    )
+    counts = receipt["severity_counts"]
+    if (
+        receipt["scanner_version"] != image_archive.SCANNER_VERSION
+        or scan.returncode
+        or counts.get("High", 0)
+        or counts.get("Critical", 0)
+    ):
+        raise RuntimeError("Image scan blocked; inspect the complete vulnerability report")
+    receipt["scan_passed"] = True
 
 
 def main():
@@ -275,6 +300,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="cinevault-image-") as directory:
             archive = Path(directory) / "image.tar"
             export_image_archive(receipt["image_id"], archive)
+            archive_evidence = image_archive.inspect_image_archive(archive, receipt["image_id"])
             scan = subprocess.run(
                 [
                     "docker",
@@ -309,25 +335,9 @@ def main():
                     "high",
                 ],
                 capture_output=True,
-                text=True,
-                encoding="utf-8",
                 timeout=600,
             )
-            (reports / "image-vulnerabilities.json").write_text(scan.stdout, encoding="utf-8")
-            (reports / "image-scan.log").write_text(scan.stderr, encoding="utf-8")
-            receipt["scanner_exit_code"] = scan.returncode
-            try:
-                report = json.loads(scan.stdout)
-                receipt["severity_counts"] = dict(
-                    Counter(m["vulnerability"]["severity"] for m in report["matches"])
-                )
-                receipt["database"] = report["descriptor"]["db"]
-                receipt["scanner_version"] = report["descriptor"]["version"]
-            except (ValueError, KeyError, TypeError) as exc:
-                raise RuntimeError("Scanner report missing or malformed; scan cannot pass") from exc
-            if receipt["scanner_version"] != "0.121.2" or scan.returncode:
-                raise RuntimeError("Image scan blocked; inspect the complete vulnerability report")
-            receipt["scan_passed"] = True
+            record_scan(receipt, reports, archive, archive_evidence, scan)
     except (
         OSError,
         ValueError,
