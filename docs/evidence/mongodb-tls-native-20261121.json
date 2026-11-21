@@ -1,0 +1,33 @@
+{
+  "archive_sha256": "e14b91c4fa6ed6048cb18384287bf9ae36a2d1dfc8ef7924e298f554093e1f10",
+  "cleanup_confirmed": true,
+  "finished_at_utc": "2026-11-21T07:53:34.470426+00:00",
+  "manifest_sha256": "9c748f3a72f650d4cd0bc753f395764458ea67983869da8a1c1d255a519247b7",
+  "native_receipt_sha256": "209feab2dd9eb840a2eb4b096f2c61d5d09d7532ac779225387e2da47fd4518f",
+  "passed": true,
+  "proof": {
+    "anonymous_driver": 13,
+    "factory_readiness": {
+      "missing_authentication": "factory_refused",
+      "no_tls_direct_loopback": 503,
+      "no_tls_outside_loopback_allowlist": "factory_refused",
+      "verified_tls": 200,
+      "wrong_ca": 503,
+      "wrong_ip_san": 503,
+      "wrong_password": 503
+    },
+    "ip_and_dns_san_verified": true,
+    "no_tls_driver": "server_selection_timeout",
+    "passed": true,
+    "peer_sha256": "2cda16933edff5812132f0bdb6b061f7b8e516abca98ba3d23ef1f7be221f404",
+    "read_only_revision_unchanged": true,
+    "stage": "complete",
+    "tls_version": "TLSv1.3",
+    "wrong_ca_verification_code": 19,
+    "wrong_ip_verification_code": 64,
+    "wrong_password_driver": 18
+  },
+  "scope": "isolated replica namespace; application readiness over verified TLS",
+  "source_commit": "a500e245f2eb414f89f556473f6159b34b2d3127",
+  "started_at_utc": "2026-11-21T07:52:10.092383+00:00"
+}

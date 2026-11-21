@@ -1,0 +1,44 @@
+{
+  "archive_sha256": "a161cc0f6d3d466c70f1cf6b974529592e2668e3fd12319e75ebe0fe147cccde",
+  "cleanup_confirmed": true,
+  "finished_at_utc": "2026-11-21T07:55:40.135516+00:00",
+  "manifest_sha256": "519a4ee983a8222453962ad793cb9f2d2955cdec6937b54c23e415916aff1e01",
+  "native_receipt_sha256": "c3c76b641d665f5af8219d761e137e0a20046327b5f34d01b65097bbf2e12d49",
+  "passed": true,
+  "proof": {
+    "checks": {
+      "atomic_refusal": true,
+      "csv_export": true,
+      "empty_candidate_verified": true,
+      "json_export": true,
+      "native_shape_invariants": true,
+      "new_film_and_stock_append": true,
+      "role_and_key_guards": true,
+      "same_key_replay": true,
+      "secret_file_removed_no_json_business_store": true
+    },
+    "http_status_counts": {
+      "200": 12,
+      "201": 2,
+      "401": 1,
+      "403": 2,
+      "404": 1,
+      "409": 2,
+      "428": 1
+    },
+    "persisted_counts": {
+      "copies": 3,
+      "movies": 2,
+      "receipts": 2,
+      "sessions": 3,
+      "transfer_audit_events": 5,
+      "users": 3
+    },
+    "source_code_sha256": "43702fc367c9b100823848a127a5fdbd9a0e7311bad81d263c6483ca75b95aa3",
+    "source_commit": "a500e245f2eb414f89f556473f6159b34b2d3127",
+    "status": "passed"
+  },
+  "scope": "isolated replica namespace; real HTTP catalogue transfer",
+  "source_commit": "a500e245f2eb414f89f556473f6159b34b2d3127",
+  "started_at_utc": "2026-11-21T07:54:50.589932+00:00"
+}

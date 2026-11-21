@@ -62,3 +62,10 @@ L'export lit films et exemplaires dans le même instantané que le contrôle d'a
 `tests/test_transfer_services.py` couvre en plus les clés naturelles ambiguës, l'ordre canonique, le rejeu des anciens reçus, la révocation pendant la préparation et la stabilité après annulation. `tests/test_mongo_transfer_ports.py` vérifie le groupement et les références sur le double du pilote.
 
 La preuve Compose locale distincte vérifie le parcours HTTP multipart → web → API JSON → document et le redémarrage. Les tests web isolés utilisent une API simulée. Le contrôle visuel navigateur des nouveaux écrans et le déploiement distribué restent des validations séparées.
+
+
+Le 21 novembre 2026, la campagne native `a500e245` a exécuté 21 requêtes HTTP
+sur MongoDB 8.0.34. Elle a créé un film et ajouté du stock au même lot,
+vérifié l'atomicité du refus, les droits, le rejeu et les exports JSON et CSV.
+L'état natif final compte deux films, trois exemplaires et deux reçus.
+[Reçu natif de transfert](evidence/catalogue-transfer-native-20261121.json).

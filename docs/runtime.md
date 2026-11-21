@@ -40,3 +40,23 @@ Le 7 novembre 2026, les scans complets ont refusé l'image Debian initiale, puis
 Le dernier scan local a trouvé zéro High/Critical, cinq Medium et un Low, avec la base Grype datée du 7 novembre. Le seuil High/Critical est inchangé ; tous les avis restent dans le rapport. Ce résultat n'est pas une preuve d'absence de vulnérabilité et devra être renouvelé au build de livraison. Les vérifications locales ne constituent pas une exécution GitHub Actions ou un déploiement Swarm.
 
 Les scripts et commandes de revalidation sont décrits dans [quality.md](quality.md). Les données, clés et archives de laboratoire restent hors du dépôt et du contexte de construction.
+
+
+Une campagne isolée du 21 novembre 2026 a vérifié TLS 1.3 sur MongoDB réel.
+Le certificat et l'identité SCRAM attendus donnent 200 à `/health`. Une CA,
+un nom de serveur ou un mot de passe incorrects donnent 503. La révision
+reste inchangée et les ressources temporaires sont retirées. La campagne
+s'est déroulée dans un espace réseau privé à un seul hôte.
+[Reçu TLS et disponibilité](evidence/mongodb-tls-native-20261121.json).
+
+## Contrôle frais du 21 novembre 2026
+
+Grype 0.121.2, base du 21 novembre à 06 h 20 UTC, a refusé le build local
+de staging. Les cinq avis CVE-2026-107493, CVE-2026-107494, CVE-2026-121482,
+CVE-2026-124709 et CVE-2026-84786 apparaissent sur chacun des deux paquets
+Alpine `libcrypto3` et `libssl3` en version `3.5.9-r1`. Le démarrage, l'UID
+et le nettoyage de la sonde ont réussi. Le contrôle High/Critical reste requis
+avant de distribuer cette image ou de l'utiliser pour le staging.
+L'index Alpine x86_64 consulté proposait les deux paquets en `3.5.9-r1`.
+[Index Alpine](https://pkgs.alpinelinux.org/packages?arch=x86_64&branch=v3.24&name=openssl&repo=main).
+[Versions OpenSSL publiées](https://www.openssl-library.org/source/).
