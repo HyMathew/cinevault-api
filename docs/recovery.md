@@ -81,6 +81,17 @@ Le statut `matched` confirme l'égalité de l'instantané complet. Un écart ou 
 
 ## Portée de la validation
 
+La campagne native du 21 novembre 2026 a restauré une archive chiffrée
+contenant 393 documents, 12 collections et 40 index dans un MongoDB isolé.
+La CLI a préservé la source et publié la révision 174 dans la deuxième base
+à partir de la révision 173. Quatre comptes ont été désactivés avec remplacement
+de leurs hachages, six sessions et quatre compteurs d'admission supprimés, et
+deux attentes de réservation clôturées avec audit. Après rapprochement, le nouvel
+administrateur a obtenu 200 sur la connexion et le profil. Un ancien mot de passe
+et un ancien jeton ont reçu 401. La sonde a vérifié l'empreinte source inchangée,
+les refus sur empreinte erronée et cible remplie, puis le nettoyage des ressources.
+[Reçu de quarantaine MongoDB](evidence/mongodb-quarantine-native-20261121.json).
+
 Les tests unitaires/applicatifs utilisent de vrais fichiers et clients Flask ; le test multiprocessus crée exactement une cible validée et un événement de reprise. L'intégration Compose distincte prend un instantané, arrête l'API, restaure un nouveau fichier, redémarre avec ce chemin et vérifie les accès par HTTP. Les identifiants et données de cette démonstration sont synthétiques. Cette preuve locale ne démontre pas une bascule Swarm distante, ni un RTO/RPO mesuré sur une panne réelle du laboratoire.
 
 Après reprise, inspecter les quantités et historiques, réconcilier les changements postérieurs à la sauvegarde, renouveler les clés de service dans des fichiers privés, invalider les anciennes sessions de présentation et vérifier la connexion/déconnexion. Ne pas redémarrer l'ancien écrivain. Une sauvegarde n'est ni une réplication ni une garantie de perte nulle ; indiquer l'instant de sauvegarde retenu. Les archives et volumes sont confidentiels et doivent conserver des permissions adaptées.
