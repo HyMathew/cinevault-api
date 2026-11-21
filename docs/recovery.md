@@ -2,7 +2,7 @@
 
 La primitive `V2Store.restore` restaure exactement un instantané validé vers une cible absente. Elle reste disponible pour vérification d'archive ; elle réintroduit aussi l'état d'authentification historique et ne constitue pas une remise en service sûre.
 
-La reprise opérationnelle est une commande locale hors ligne, sans nouvelle route HTTP. L'opérateur arrête les écritures et conserve l'ancien volume ; la commande écrit exclusivement une nouvelle cible absente, après contrôle SHA-256 fourni depuis une source fiable et validation complète du document. Aucun écrasement ou suppression de l'ancien fichier. L'arrêt du service et le choix du bon instantané sont des préconditions d'exploitation ; l'outil ne prétend pas détecter tous les processus distants ou contrôler l'orchestrateur.
+La reprise opérationnelle s'exécute en maintenance, sans nouvelle route HTTP. L'opérateur arrête les écritures et conserve l'ancien volume. Après contrôle SHA-256 fourni depuis une source fiable et validation complète de l'instantané, la commande crée un fichier JSON absent ou publie dans une base MongoDB distincte, vide et préprovisionnée. L'arrêt des écrivains et le choix de l'instantané relèvent de l'exploitant.
 
 Politique retenue : conserver les entités métier et leurs références ; supprimer les sessions et compteurs anti-abus historiques ; désactiver tous les comptes restaurés et remplacer leurs hachages par des mots de passe aléatoires inconnus et immédiatement jetés. Ainsi, une simple réactivation web ne rétablit pas un ancien mot de passe. Un nouvel administrateur de reprise reçoit un identifiant distinct et un mot de passe saisi dans le terminal, sans valeur par défaut ni argument de ligne de commande. Aucun jeton émis.
 
@@ -47,7 +47,7 @@ Le fichier contient l'URI privée avec accès à un replica set, authentificatio
 
 La création du premier administrateur est refusée dès qu'un compte possède ce rôle, y compris si son compte est désactivé, ou si la limite de 10 000 comptes est atteinte. Le reset exige un administrateur actif. Le nouveau hachage, la révocation des sessions du compte ciblé et l'événement d'audit sont écrits dans une seule transaction. Si la commande signale un résultat incertain, vérifier l'état de la base avant de répéter l'opération.
 
-La restauration d'instantané `app.recovery restore` est réservée aux instantanés JSON. À 10 000 comptes dans l'instantané, aucun candidat ne peut être créé avec un administrateur de reprise supplémentaire dans la limite actuelle. Une procédure complète de restauration MongoDB avec mise en quarantaine des comptes reste à valider.
+À 10 000 comptes dans l'instantané, la création d'un candidat est refusée. L'administrateur de reprise doit tenir dans cette limite sur les deux moteurs.
 
 Le 20 novembre 2026, deux vraies commandes interactives ont créé le premier
 administrateur et réinitialisé un mot de passe dans une base MongoDB isolée.
@@ -55,6 +55,29 @@ La campagne a vérifié les refus sans mutation, la révocation des sessions
 ciblées, la réactivation explicite, l'audit dans la même transaction et la
 saisie masquée. La restauration JSON a été vérifiée séparément dans la même
 campagne. [Reçu natif P5 et C5](evidence/mongodb-p5-operator-native-20261120.json).
+
+## Reprise d'un instantané MongoDB
+
+Restaurer la sauvegarde dans une base source isolée et conserver cette base. Préprovisionner une deuxième base dédiée avec les collections, index et validateurs CineVault v2 et une révision initiale à zéro. Arrêter les écrivains et exclure les changements de schéma sur les deux bases avant l'inspection. Maintenir l'isolement jusqu'à la réconciliation et aux contrôles de reprise. L'attestation `--isolated-and-writers-stopped` consigne cette décision opérateur.
+
+Utiliser deux fichiers URI privés et deux identités MongoDB distinctes. Donner au lecteur la lecture et l'inspection de la source uniquement. Donner à l'écrivain l'inspection et l'écriture transactionnelle des données sur la cible uniquement. Réserver le provisionnement des collections et des index à une identité de maintenance séparée. Les connexions distantes exigent TLS avec vérification. Conserver les reçus et fichiers d'accès dans un emplacement privé.
+
+```console
+python -m app.recover_mongo inspect-source --source-uri-file /run/secrets/recovery_reader_uri --source-database cinevault_snapshot
+python -m app.recover_mongo apply --source-uri-file /run/secrets/recovery_reader_uri --source-database cinevault_snapshot --target-uri-file /run/secrets/recovery_writer_uri --target-database cinevault_recovered --expected-source-snapshot-sha256 <empreinte-source-verifiee> --isolated-and-writers-stopped
+```
+
+Comparer l'empreinte native `snapshot_sha256` à la référence de l'instantané approuvé. La commande `apply` demande les coordonnées du nouvel administrateur au terminal et masque la saisie et la confirmation de son mot de passe. Elle applique la politique de quarantaine commune en mémoire, sans produire d'export intermédiaire. La coordination, les comptes, les entités métier, les clôtures et l'audit sont publiés dans la même transaction. La révision cible est celle de la source plus un. Une révision source au maximum BSON Int64 entraîne un refus.
+
+En cas de succès, conserver le reçu JSON et son `target_snapshot_sha256`. Celui-ci décrit le contenu initial complet du candidat avant toute connexion de l'application. Une nouvelle exécution avec une cible déjà remplie est refusée. Les tentatives transactionnelles internes utilisent le même candidat.
+
+En cas de résultat de publication incertain, le code de sortie est 3 et le reçu JSON porte le statut `commit_outcome_unknown`. Maintenir la cible isolée et confronter le reçu au contenu de la base avec une identité de lecture sur la cible.
+
+```console
+python -m app.recover_mongo reconcile --target-uri-file /run/secrets/recovery_target_reader_uri --target-database cinevault_recovered --expected-target-snapshot-sha256 <empreinte-du-recu>
+```
+
+Le statut `matched` confirme l'égalité de l'instantané complet. Un écart ou une indisponibilité laisse l'issue non confirmée. Si le processus s'est interrompu avant l'émission du reçu, conserver la cible isolée pour inspection et reprendre sur une nouvelle cible vide si la reprise doit être refaite. L'outil ne réalise aucune bascule de configuration de l'API.
 
 ## Portée de la validation
 

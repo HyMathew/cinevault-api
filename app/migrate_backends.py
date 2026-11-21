@@ -136,15 +136,20 @@ def _decode_json(raw):
         raise MigrationError("Invalid JSON v2 migration input") from None
 
 
-def _prepare_forward(raw):
+def prepare_native_snapshot(document):
+    """Encode a v2 document in memory and fingerprint the candidate."""
     from .persistence.migration_codec import MigrationDataError, encode_snapshot
 
-    document = _decode_json(raw)
     try:
         snapshot = encode_snapshot(document)
     except MigrationDataError as exc:
         raise MigrationError(str(exc)) from None
-    return snapshot, {**_receipt(snapshot, document["revision"]), "source_sha256": _sha(raw)}
+    return snapshot, _receipt(snapshot, document["revision"])
+
+
+def _prepare_forward(raw):
+    snapshot, report = prepare_native_snapshot(_decode_json(raw))
+    return snapshot, {**report, "source_sha256": _sha(raw)}
 
 
 def inspect_json(source):
@@ -257,9 +262,7 @@ def _write_forward(database, session, names, snapshot, report):
     previous = _decode_snapshot(current)
     if _snapshot_sha256(current) == report["snapshot_sha256"]:
         raise _AlreadyApplied
-    if previous["revision"] != 0 or any(
-        rows for name, rows in current.items() if name != "coordination"
-    ):
+    if not empty_native_snapshot(previous["revision"], current):
         raise MigrationError("MongoDB candidate is neither empty nor exactly the inspected source")
     for name, rows in snapshot.items():
         if name != "coordination":
@@ -280,6 +283,25 @@ def _write_forward(database, session, names, snapshot, report):
         raise MigrationError("MongoDB candidate differs after transactional readback")
 
 
+def empty_native_snapshot(revision, collections):
+    """Only the coordination document may exist in an empty, verified snapshot."""
+    return revision == 0 and not any(
+        rows for name, rows in collections.items() if name != "coordination"
+    )
+
+
+def publish_native_snapshot(database, snapshot, report):
+    """Publish the verified snapshot only to an empty or exactly matching database."""
+    names = _preflight(database)
+    try:
+        _runner(database).run(
+            lambda session: _write_forward(database, session, names, snapshot, report)
+        )
+    except _AlreadyApplied:
+        return "already_applied"
+    return "applied"
+
+
 def apply_forward(database, source, backup, *, expected_source_sha256):
     """Import to an explicitly isolated, separately provisioned candidate."""
     source, backup = _path(source), _path(backup)
@@ -291,17 +313,11 @@ def apply_forward(database, source, backup, *, expected_source_sha256):
         if not hmac.compare_digest(raw, _read_file(backup)):
             raise MigrationError("Retained JSON backup does not match the inspected source")
         snapshot, report = _prepare_forward(raw)
-        names = _preflight(database)
-        try:
-            _runner(database).run(
-                lambda session: _write_forward(database, session, names, snapshot, report)
-            )
-        except _AlreadyApplied:
-            return {"status": "already_applied", **report}
-        return {"status": "applied", **report}
+        return {"status": publish_native_snapshot(database, snapshot, report), **report}
 
 
-def _read_verified_snapshot(database):
+def read_verified_snapshot(database):
+    """Read and validate one coherent native snapshot in a read-only transaction."""
     names = _preflight(database)
 
     def read(session):
@@ -317,14 +333,14 @@ def reconcile_forward(database, source, *, expected_source_sha256):
     raw = _read_file(_path(source))
     _require_sha256(expected_source_sha256, _sha(raw), "JSON source changed since inspection")
     _, expected = _prepare_forward(raw)
-    _, observed = _read_verified_snapshot(database)
+    _, observed = read_verified_snapshot(database)
     if observed["snapshot_sha256"] != expected["snapshot_sha256"]:
         raise CommitOutcomeUnknown("Read-only reconciliation did not confirm the imported state")
     return {"status": "matched", **expected}
 
 
 def _prepare_reverse(database):
-    document, report = _read_verified_snapshot(database)
+    document, report = read_verified_snapshot(database)
     candidate = _encode(_ordered_fields(document))
     return candidate, {**report, "candidate_sha256": _sha(candidate)}
 
@@ -407,6 +423,11 @@ def _parser():
     return parser
 
 
+def require_database_name(name):
+    if re.fullmatch("[a-z][a-z0-9_]{0,62}", name) is None or name in {"admin", "config", "local"}:
+        raise MigrationError("A named CineVault candidate database is required")
+
+
 def _online(args):
     from pymongo import MongoClient, ReadPreference
     from pymongo.errors import ConfigurationError, InvalidURI, PyMongoError
@@ -414,12 +435,7 @@ def _online(args):
 
     from .persistence.factory import validate_mongo_uri
 
-    if re.fullmatch("[a-z][a-z0-9_]{0,62}", args.database) is None or args.database in {
-        "admin",
-        "config",
-        "local",
-    }:
-        raise MigrationError("A named CineVault candidate database is required")
+    require_database_name(args.database)
     uri = os.environ.get(URI_ENV)
     if not uri:
         raise MigrationError(f"The {URI_ENV} environment variable is required")

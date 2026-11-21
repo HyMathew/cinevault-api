@@ -48,11 +48,8 @@ def verified_snapshot(path, expected_sha256):
     return decode_document(data)
 
 
-def recover(snapshot, target, expected_sha256, username, display_name, password, *, timestamp=None):
-    target = Path(target)
-    if target.exists():
-        raise FileExistsError("Recovery target already exists")
-    document = verified_snapshot(snapshot, expected_sha256)
+def quarantine_accounts(document, username, display_name, password, *, timestamp=None):
+    """Transform a caller-owned, validated v2 document before publication."""
     timestamp = int(time.time()) if timestamp is None else timestamp
     check_clock(document, timestamp)
     username = normalize_username(username)
@@ -68,8 +65,6 @@ def recover(snapshot, target, expected_sha256, username, display_name, password,
     admin = make_user(username, display_name, password, "admin", timestamp)
     report = {
         "operation_id": str(uuid.uuid4()),
-        "source_sha256": expected_sha256,
-        "target_sha256": "",
         "disabled_users": len(document["users"]),
         "revoked_sessions": len(document["sessions"]),
         "closed_reservations": 0,
@@ -100,11 +95,23 @@ def recover(snapshot, target, expected_sha256, username, display_name, password,
     )
     document["revision"] += 1
     validate_document(document)
+    return report
+
+
+def recover(snapshot, target, expected_sha256, username, display_name, password, *, timestamp=None):
+    target = Path(target)
+    if target.exists():
+        raise FileExistsError("Recovery target already exists")
+    document = verified_snapshot(snapshot, expected_sha256)
+    report = quarantine_accounts(document, username, display_name, password, timestamp=timestamp)
     encoded = _encode(document)
     with portalocker.Lock(str(target) + ".lock", mode="a", timeout=10):
         _write_new(target, encoded)
-    report["target_sha256"] = hashlib.sha256(encoded).hexdigest()
-    return report
+    return {
+        **report,
+        "source_sha256": expected_sha256,
+        "target_sha256": hashlib.sha256(encoded).hexdigest(),
+    }
 
 
 def reset_password(store, operator, username, password, *, enable=False, timestamp=None):
