@@ -118,5 +118,15 @@ l'état actuel, vérifier la révision, les reçus, les références et l'ordre
 d'audit, puis redémarrer l'API JSON sur ce fichier neuf et rejouer les
 parcours métier. Le rapport doit distinguer les essais par doubles des
 exécutions natives. Les tests locaux du pilote couvrent la commande, les
-fichiers réels et le protocole transactionnel avec un double. La campagne
-native et les parcours HTTP après basculement restent à exécuter.
+fichiers réels et le protocole transactionnel avec un double.
+
+Le 20 novembre 2026, la campagne native du commit `a500e245` a provisionné
+12 collections et 40 index sur une réplique MongoDB 8.0.34 isolée. Le vrai
+CLI a importé une copie synthétique, confirmé son rejeu et refusé les
+empreintes périmées et une destination existante différente. Les 39 requêtes
+HTTP en boucle locale ont créé une inscription, des sessions, un prêt approuvé
+et une réservation. Le retour a exporté ces écritures et le redémarrage JSON
+a retrouvé les vues, sessions et reçus. Les octets de la source et de sa copie
+sont identiques à la fin. Le réplica, les volumes et les répertoires temporaires
+ont été retirés. Le réseau de cette sonde ne comporte qu'une boucle locale.
+[Reçu natif P5 et C5](evidence/mongodb-p5-operator-native-20261120.json).

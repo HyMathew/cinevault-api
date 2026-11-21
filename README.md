@@ -20,7 +20,7 @@ Définir `ENTERPRISE_ENABLED=true` et `AUTH_THROTTLE_KEY_FILE` vers un fichier p
 - [Protection des créations contre les doubles envois](docs/idempotency.md).
 - [Import/export JSON et CSV du catalogue](docs/import-export-contract.md).
 - [Statistiques et recommandations explicables](docs/insights-contract.md).
-- [Sauvegarde et reprise contrôlée](docs/recovery.md).
+- [Sauvegarde et reprise contrôlée](docs/recovery.md), [migration et retour JSON](docs/mongodb-migration.md).
 - [Métadonnées Wikidata/Commons, cache et affiches](docs/metadata-contract.md).
 - [Spécification OpenAPI](docs/openapi-v1.json), schéma de stockage sous `schemas/`.
 

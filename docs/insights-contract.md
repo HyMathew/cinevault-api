@@ -1,5 +1,10 @@
 # Statistiques et recommandations
 
+Les services de statistiques, de recommandations et de métadonnées ont été
+exercés sur un MongoDB isolé restauré avec 393 documents. La sonde a comparé
+14 réponses complètes à une référence JSON et vérifié le périmètre des lectures
+des données privées et du stock. [Reçu de qualification des services](evidence/read-services-native-20261120.json).
+
 Choix d'implémentation : calculs déterministes sur un instantané du document, sans dépendance de statistiques ni machine learning. Les compteurs sont dérivés et non persistés, pour éviter des agrégats désynchronisés. Les préférences temporaires de genre se transmettent par paramètres validés et ne changent pas le profil de compte.
 
 `GET /api/v1/statistics?scope=mine|all` exige une identité. Le catalogue partagé est agrégé pour tous ; les collections, prêts et activités personnels concernent toujours l'acteur, même administrateur. `all` ajoute les agrégats d'exploitation prêts/réservations pour manager/admin seulement, sans collections privées des tiers ni identités. Le nombre d'événements concerne le journal circulaire conservé, pas un historique exhaustif. Fenêtre d'activité : sept jours glissants. Disponibilité et attente non expirée sont calculées à l'heure de la requête, sous le même verrou.

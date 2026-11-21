@@ -49,6 +49,13 @@ La création du premier administrateur est refusée dès qu'un compte possède c
 
 La restauration d'instantané `app.recovery restore` est réservée aux instantanés JSON. À 10 000 comptes dans l'instantané, aucun candidat ne peut être créé avec un administrateur de reprise supplémentaire dans la limite actuelle. Une procédure complète de restauration MongoDB avec mise en quarantaine des comptes reste à valider.
 
+Le 20 novembre 2026, deux vraies commandes interactives ont créé le premier
+administrateur et réinitialisé un mot de passe dans une base MongoDB isolée.
+La campagne a vérifié les refus sans mutation, la révocation des sessions
+ciblées, la réactivation explicite, l'audit dans la même transaction et la
+saisie masquée. La restauration JSON a été vérifiée séparément dans la même
+campagne. [Reçu natif P5 et C5](evidence/mongodb-p5-operator-native-20261120.json).
+
 ## Portée de la validation
 
 Les tests unitaires/applicatifs utilisent de vrais fichiers et clients Flask ; le test multiprocessus crée exactement une cible validée et un événement de reprise. L'intégration Compose distincte prend un instantané, arrête l'API, restaure un nouveau fichier, redémarre avec ce chemin et vérifie les accès par HTTP. Les identifiants et données de cette démonstration sont synthétiques. Cette preuve locale ne démontre pas une bascule Swarm distante, ni un RTO/RPO mesuré sur une panne réelle du laboratoire.

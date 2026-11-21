@@ -1,0 +1,109 @@
+{
+  "c5_operator": {
+    "checks": {
+      "cli_bootstrap_masks_password_and_commits_one_admin": true,
+      "disabled_account_reenabled_only_with_explicit_option": true,
+      "json_snapshot_quarantine_and_no_clobber": true,
+      "non_admin_reset_refused_without_mutation": true,
+      "old_password_rejected_and_new_password_accepted": true,
+      "reset_audit_and_password_update_share_one_revision": true,
+      "reset_revokes_target_sessions_and_preserves_other_session": true,
+      "second_bootstrap_and_mongo_snapshot_refused_without_mutation": true
+    },
+    "probe": "native_operator_cli",
+    "reset_audit_events": 3,
+    "stage": "complete",
+    "status": "PASS"
+  },
+  "candidate_archive_sha256": "61154e45ed95299a3348574243a217facef46251812c1cafb216ff0c679ba2af",
+  "candidate_manifest_sha256": "4c05a019b00cda1113f3b74962bec894e9649462ce6ec69c60175ac324cdebc2",
+  "cleanup_confirmed": true,
+  "collections": 12,
+  "engine": "8.0.34",
+  "finished_at_utc": "2026-11-20T22:49:07.458821+00:00",
+  "indexes": 40,
+  "initial_campaign": {
+    "receipt_sha256": "c212cd196fdbef90984aea0be848d17399fb35d94bfedba7bc1609ed0c7f55c0",
+    "scope": "P5 business checks passed; workspace cleanup needed a second connection",
+    "separate_cleanup_receipt_sha256": "3be27eaa5dc20f1681abeac6f2e22c37003cc39e3af44f539646b81078c83831"
+  },
+  "native_receipt_sha256": "141d0b71d13779bd7dc07dfa6d06ba425ab5f05eac74f266e267b3984ee1352c",
+  "network": "loopback in an isolated container namespace",
+  "p5": {
+    "candidate": {
+      "code_sha256": "43702fc367c9b100823848a127a5fdbd9a0e7311bad81d263c6483ca75b95aa3",
+      "file_count": 71
+    },
+    "candidate_sha256": "5867f87a808f8d77ded19cc5fe8bf6c027248540f8bded384455cc5d629f0c8d",
+    "http_status_counts": {
+      "200": 22,
+      "201": 7,
+      "401": 2,
+      "403": 3,
+      "404": 4,
+      "412": 1
+    },
+    "mongo_after": {
+      "counts": {
+        "audit_events": 5,
+        "auth_attempts": 0,
+        "collection_entries": 0,
+        "coordination": 1,
+        "copies": 1,
+        "entity_ids": 17,
+        "idempotency_records": 2,
+        "loans": 1,
+        "movies": 1,
+        "reservations": 1,
+        "sessions": 3,
+        "users": 3
+      },
+      "revision": 31,
+      "snapshot_sha256": "f74e1faad44d25eec862903fb86c67e577e18eff7c3048be85acf49e895f099b"
+    },
+    "mongo_before": {
+      "counts": {
+        "audit_events": 2,
+        "auth_attempts": 0,
+        "collection_entries": 0,
+        "coordination": 1,
+        "copies": 1,
+        "entity_ids": 6,
+        "idempotency_records": 0,
+        "loans": 0,
+        "movies": 1,
+        "reservations": 0,
+        "sessions": 0,
+        "users": 2
+      },
+      "revision": 11,
+      "snapshot_sha256": "e1ce2cf9877dff2a494b78b99c4f6428eaf749be9059402d9277b0edbe37cc9d"
+    },
+    "mongo_unchanged_by_reverse_and_json": true,
+    "original_and_backup_unchanged": true,
+    "passed_stages": [
+      "json_source_inspection",
+      "mongo_forward_and_replay",
+      "mongo_http_writes_and_stop",
+      "mongo_current_snapshot_and_forward_refusal",
+      "reverse_refusals_and_no_overwrite",
+      "reverse_export_and_replay",
+      "json_restart_http_parity_and_stop",
+      "final_immutable_sources_and_mongo",
+      "candidate_manifest_unchanged"
+    ],
+    "source_sha256": "58c6defc68a1544456d21ad3d6bd2c9884a3a03e8aaad1187255463d5e1b9f96",
+    "status": "passed"
+  },
+  "passed": true,
+  "runtime": {
+    "flask": "3.1.3",
+    "pymongo": "4.19.0",
+    "werkzeug": "3.1.9"
+  },
+  "scope": "native isolated MongoDB migration/HTTP rollback and operator CLI",
+  "separate_candidate_databases": true,
+  "source_commit": "a500e245f2eb414f89f556473f6159b34b2d3127",
+  "started_at_utc": "2026-11-20T22:47:51.365038+00:00",
+  "tls": false
+}

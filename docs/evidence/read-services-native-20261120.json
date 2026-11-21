@@ -1,0 +1,58 @@
+{
+  "catalogue_transfer_executed": false,
+  "cleanup_confirmed": true,
+  "collections": 12,
+  "finished_at_utc": "2026-11-20T22:42:04.649291+00:00",
+  "http_executed": false,
+  "indexes": 40,
+  "initial_documents": 393,
+  "passed": true,
+  "provider": "deterministic test double",
+  "reports": {
+    "native_restore_receipt_sha256": "39e9779f3dfa46c29d5f09f4bd85006598c6909238c33e3c3d9be4a6582f9052",
+    "native_service_receipt_sha256": "0ad84a4657429f658e32f4b94c2e1544d0075e2694c165ec054b4fa2ea11e13d"
+  },
+  "runtime": {
+    "bson_has_c": false,
+    "packages": {
+      "argon2-cffi": "25.1.0",
+      "argon2-cffi-bindings": "26.1.0",
+      "cffi": "2.1.1",
+      "dnspython": "2.9.2",
+      "portalocker": "4.4.2",
+      "pycparser": "3.12",
+      "pymongo": "4.19.0"
+    },
+    "pymongo_has_c": false,
+    "python": "3.12.3"
+  },
+  "scope": "isolated native MongoDB archive restore and shared services",
+  "services": {
+    "actors": 3,
+    "analytics_exact_cases": 14,
+    "hold_copy_replayed_once": true,
+    "metadata_revoke_denied": true,
+    "passed": true,
+    "poster_limit": 100,
+    "poster_reads": 2,
+    "provider_calls": {
+      "cache": 2,
+      "detail": 1,
+      "search": 2
+    },
+    "scope_refusals": 5,
+    "trace_command_counts": {
+      "aborttransaction": 5,
+      "aggregate": 77,
+      "committransaction": 23,
+      "find": 208,
+      "findandmodify": 26,
+      "update": 24
+    },
+    "validation_refusals": 4
+  },
+  "source_archive_sha256": "9a7bf96632c7b85a43499725a1ed1b24b8a614f5a96df421c3756c1490ffacd4",
+  "source_commit": "c270d941b7c80223ac8f0c8a155c1886632a909b",
+  "source_manifest_sha256": "0599420312e118e3c3ce8c19458963c802c660fc1fe7b6559539b9c7a9918953",
+  "started_at_utc": "2026-11-20T22:41:06.044692+00:00"
+}
