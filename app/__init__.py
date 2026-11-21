@@ -7,11 +7,13 @@ from werkzeug.exceptions import BadRequest, HTTPException, UnsupportedMediaType
 
 from .persistence.factory import storage_backend
 from .repository import NotFound, Repository, StorageError, unique_pairs
+from .telemetry import install_request_telemetry
 from .validation import ValidationError, validate
 
 
 def create_app(config=None):
     app = Flask(__name__)
+    install_request_telemetry(app)
     app.config.update(
         DATA_FILE=os.environ.get("DATA_FILE", "/data/films.json"),
         MAX_CONTENT_LENGTH=65536,
@@ -69,7 +71,7 @@ def create_app(config=None):
 
     @app.errorhandler(Exception)
     def internal_error(exc):
-        app.logger.exception("Erreur interne")
+        app.logger.error("Erreur interne : %s", type(exc).__name__)
         return error(500, "internal_error", "Erreur interne.")
 
     def payload():

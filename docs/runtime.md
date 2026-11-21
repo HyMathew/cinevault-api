@@ -33,6 +33,19 @@ secrets. Ils contiennent respectivement les compteurs d'admission et le cache
 fournisseur. La migration et les opérations d'administration se font séparément
 du démarrage HTTP.
 
+## Journaux des requêtes API
+
+Les réponses Flask portent un `X-Request-ID` de 32 caractères hexadécimaux
+généré par le serveur. Le même identifiant figure dans une ligne JSON sur le
+flux d'erreurs WSGI. Les champs `service`, `method`, `route`, `status` et
+`duration_ms` permettent de regrouper les requêtes par route et de calculer
+leur taux d'erreur et leur latence de traitement dans Flask.
+
+La route indique le modèle Flask, ou `unmatched` pour une requête sans règle
+applicable. La méthode vaut `OTHER` lorsqu'elle ne figure pas dans la liste
+des méthodes usuelles. Le journal d'accès Gunicorn est désactivé dans l'image.
+Les erreurs internes enregistrent le type d'exception.
+
 ## Décision et validation locale
 
 Le 7 novembre 2026, les scans complets ont refusé l'image Debian initiale, puis une image Python Alpine complète. Une image minimale a ensuite été évaluée dans un contexte isolé avant adoption : vrai HEALTHCHECK, UID 10001, scan Grype 0.121.2 sans avis ignoré, suite complète contre le code contenu dans l'image et intégration HTTP Compose des deux services. Les essais de harnais échoués ont été conservés : exécution d'un venv sur tmpfs noexec, puis oubli des schémas JSON dans le contexte de test ; aucune modification métier n'a servi à masquer ces erreurs.
