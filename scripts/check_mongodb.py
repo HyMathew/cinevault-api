@@ -21,6 +21,7 @@ from pathlib import Path
 IMAGE = "mongo@sha256:1d7a2d487c6465ea022474b90b65d6c91bb600b421b65880d8c6e141d6122200"
 LABEL = "cinevault.mongodb-contract"
 REPLICA_SET = "cinevault-ci"
+_CAPACITY_COLLECTIONS = {"sessions", "collection_entries", "loans", "reservations"}
 
 
 def verify_kernel(release):
@@ -226,6 +227,39 @@ def load_circulation_corpus(path):
     return corpus, hashlib.sha256(raw).hexdigest()
 
 
+def observe_capacity_count(command_name, database, command, pending):
+    """Recognize one index-only scalar count after inserting into the same collection."""
+    session = command.get("lsid", {}).get("id")
+    number = command.get("txnNumber")
+    if command.get("autocommit") is not False or session is None or number is None:
+        return False
+    transaction = (session, number)
+    if command_name in ("commitTransaction", "abortTransaction"):
+        pending.pop(transaction, None)
+        return False
+    collection = command.get(command_name)
+    if not isinstance(collection, str) or collection not in _CAPACITY_COLLECTIONS:
+        return False
+    address = (database, collection)
+    if command_name == "insert":
+        pending.setdefault(transaction, set()).add(address)
+        return False
+    if (
+        command_name != "aggregate"
+        or address not in pending.get(transaction, ())
+        or command.get("hint") != "_id_"
+        or command.get("pipeline")
+        != [
+            {"$match": {}},
+            {"$limit": 10001},
+            {"$group": {"_id": 1, "n": {"$sum": 1}}},
+        ]
+    ):
+        return False
+    pending[transaction].remove(address)
+    return True
+
+
 def application_contract(client, address, password, attempt, *, circulation_corpus=None):
     """Maintenance provisions; the application receives only collection CRUD."""
     from pymongo import MongoClient
@@ -236,8 +270,13 @@ def application_contract(client, address, password, attempt, *, circulation_corp
             self.operations = []
             self.private_scopes = []
             self.circulation_scopes = []
+            self.capacity_counts = {name: 0 for name in sorted(_CAPACITY_COLLECTIONS)}
+            self.pending_capacity_counts = {}
 
         def started(self, event):
+            is_capacity_count = observe_capacity_count(
+                event.command_name, event.database_name, event.command, self.pending_capacity_counts
+            )
             if event.command_name in (
                 "find",
                 "aggregate",
@@ -248,6 +287,11 @@ def application_contract(client, address, password, attempt, *, circulation_corp
             ):
                 self.operations.append((event.command_name, event.command.get(event.command_name)))
                 collection = event.command.get(event.command_name)
+                if is_capacity_count:
+                    # Public read checks still see every command. The scoped tests below
+                    # account for data access separately from the verified scalar count.
+                    self.capacity_counts[collection] += 1
+                    return
                 if event.command_name == "find":
                     selectors = [event.command.get("filter", {})]
                 elif event.command_name == "aggregate":
@@ -410,6 +454,9 @@ def application_contract(client, address, password, attempt, *, circulation_corp
             and circulation["native_process_races"]["checked"]
         ):
             raise RuntimeError("Required native circulation trace/process checks were not executed")
+        if not all(trace.capacity_counts.values()):
+            raise RuntimeError("Required transactional capacity counts were not observed")
+        result["transactional_capacity_counts"] = trace.capacity_counts
         if circulation_corpus is not None:
             from properties.circulation_corpus import exercise_circulation_corpus
 

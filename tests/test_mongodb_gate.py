@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from scripts import check_mongodb
 from scripts.check_mongodb import (
     LABEL,
     Diagnostics,
@@ -18,6 +19,44 @@ from scripts.check_mongodb import (
 
 
 class MongoGateBoundaryTests(unittest.TestCase):
+    def test_capacity_count_requires_the_exact_bounded_pipeline_after_a_matching_insert(self):
+        transaction = {"lsid": {"id": "fixture-session"}, "txnNumber": 7, "autocommit": False}
+        database = "fixture_database"
+        insert = {"insert": "collection_entries", **transaction}
+        stages = [
+            {"$match": {}},
+            {"$limit": 10001},
+            {"$group": {"_id": 1, "n": {"$sum": 1}}},
+        ]
+        count = {
+            "aggregate": "collection_entries",
+            "hint": "_id_",
+            "pipeline": stages,
+            **transaction,
+        }
+        pending = {}
+        observe = check_mongodb.observe_capacity_count
+
+        self.assertFalse(observe("aggregate", database, count, pending))
+        self.assertFalse(observe("insert", database, insert, pending))
+        for alternative in (
+            {"autocommit": True},
+            {"txnNumber": 8},
+            {"aggregate": "loans"},
+            {"hint": None},
+            {"pipeline": [{"$match": {}}, *stages[2:]]},
+            {"pipeline": [{"$match": {}}, {"$limit": 10002}, stages[-1]]},
+            {"pipeline": [*stages, {"$project": {"unexpected": 1}}]},
+        ):
+            with self.subTest(alternative=alternative):
+                self.assertFalse(observe("aggregate", database, {**count, **alternative}, pending))
+        self.assertFalse(observe("aggregate", "other_database", count, pending))
+        self.assertTrue(observe("aggregate", database, count, pending))
+        self.assertFalse(observe("aggregate", database, count, pending))
+        self.assertFalse(observe("insert", database, insert, pending))
+        self.assertFalse(observe("abortTransaction", "admin", transaction, pending))
+        self.assertFalse(observe("aggregate", database, count, pending))
+
     def test_optional_circulation_corpus_is_checked_completely_before_engine_io(self):
         from scripts import check_mongodb
 
