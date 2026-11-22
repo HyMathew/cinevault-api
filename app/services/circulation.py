@@ -24,10 +24,11 @@ from .results import ServiceResult, failure
 
 def expire_waiting(work, timestamp, namespace):
     for batch in work.circulation.expired_batches(timestamp):
+        events = []
         for entry in batch:
             entry.update(status="expired", closed_at=timestamp)
             work.circulation.save_reservation(entry)
-            work.events.append(
+            events.append(
                 make_event(
                     derived_event_id(namespace, "reservation.expired", entry["id"]),
                     None,
@@ -37,6 +38,7 @@ def expire_waiting(work, timestamp, namespace):
                     timestamp,
                 )
             )
+        work.events.append_batch(events)
 
 
 def cancel_disabled_in_work(work, user_id, actor_id, timestamp, namespace):

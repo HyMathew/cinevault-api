@@ -364,10 +364,34 @@ def exercise_personal_service(database, *, scope_observer=None):
     page, total = backend.query(lambda work: work.events.page(100, 0))
     assert total == 2000 and [row["id"] for row in page] == list(reversed(expected))[:100]
     first_extra, second_extra = event(actor, timestamp=NOW + 5), event(actor, timestamp=0)
+    if scope_observer is not None:
+        scope_observer.clear()
     backend.run(lambda work: (work.events.append(first_extra), work.events.append(second_extra)))
+    if scope_observer is not None:
+        count_reads = sum(
+            command == "aggregate" and collection == "audit_events"
+            for command, collection, *_ in scope_observer
+        )
+        assert count_reads == 1, "Consecutive audit appends recounted the same journal"
+        result["audit_size_reads_per_append_transaction"] = count_reads
     page, total = backend.query(lambda work: work.events.page(2, 0))
     assert total == 2000 and page == [second_extra, first_extra]
     result["multiple_appends_preserve_order_in_one_transaction"] = True
+
+    before = backend.query(lambda work: work.revision)
+    new_event = event(actor)
+    try:
+        backend.run(lambda work: work.events.append_batch([new_event, second_extra]))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("An audit batch reused a retained event ID")
+    assert backend.query(lambda work: work.revision) == before
+    assert database.audit_events.count_documents({"_id": new_event["id"]}) == 0
+    assert database.entity_ids.count_documents({"_id": new_event["id"]}) == 0
+    assert backend.query(lambda work: work.events.page(2, 0)) == ([second_extra, first_extra], 2000)
+    result["failed_audit_batch_preserved_journal_and_registry"] = True
+
     for field in ("owner_id", "movie_id"):
         invalid_entry = {
             "id": str(uuid.uuid4()),

@@ -103,6 +103,7 @@ class ReadEvents(Protocol):
 
 class Events(ReadEvents, Protocol):
     def append(self, event: Record) -> None: ...
+    def append_batch(self, events: list[Record]) -> None: ...
 
 
 class ReadCirculation(Protocol):

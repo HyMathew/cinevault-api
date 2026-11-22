@@ -282,7 +282,24 @@ def exercise_circulation_service(database, *, observer=None, process_config=None
             registry_count=lambda: database.entity_ids.count_documents({}),
         )
     )
+    expiration_start = len(observer) if observer is not None else 0
     result.update(exercise_native_expiration_batches(database))
+    if observer is not None:
+        expiration_commands = observer[expiration_start:]
+        reservation_counts = sum(
+            command == "aggregate" and collection == "reservations"
+            for command, collection, *_ in expiration_commands
+        )
+        # At most one quota check for each of 51 members and seven result page counts.
+        assert reservation_counts <= 58, "Expiration repeatedly checked the same member quota"
+        audit_writes = sum(
+            command == "insert" and collection == "audit_events"
+            for command, collection, *_ in expiration_commands
+        )
+        # The fixture is prepared directly. The service writes 501 audit events in two batches.
+        assert audit_writes == 2, "Expiration sent individual journal insertions"
+        result["expiration_reservation_count_queries"] = reservation_counts
+        result["expiration_audit_insert_commands"] = audit_writes
     result.update(exercise_native_query_plans(database))
     if process_config is None:
         result["native_process_races"] = {"checked": False, "reason": "process_config absent"}

@@ -1,6 +1,7 @@
 """Targeted MongoDB repositories bound to one owned transaction/session."""
 
 import re
+from functools import cache
 from itertools import batched, islice
 from os import getpid
 from threading import get_ident
@@ -123,27 +124,28 @@ class _MongoScope:
         ):
             raise ValueError("Entity identity registry is inconsistent")
 
-    def _parent(self, document, name, identity):
+    @staticmethod
+    def _parent(document, name, identity, find_reference):
         if identity is None:
             return
-        raw = self.find(name, {"_id": identity})
+        raw = find_reference(name, identity)
         if raw is not None and all(row["id"] != identity for row in document[name]):
             document[name].append(decode_record(name, raw))
 
-    def _loan_parents(self, document, loan):
-        self._parent(document, "users", loan["borrower_id"])
-        self._parent(document, "movies", loan["movie_id"])
-        self._parent(document, "copies", loan["copy_id"])
+    def _loan_parents(self, document, loan, find_reference):
+        self._parent(document, "users", loan["borrower_id"], find_reference)
+        self._parent(document, "movies", loan["movie_id"], find_reference)
+        self._parent(document, "copies", loan["copy_id"], find_reference)
 
-    def _circulation_fragment(self, document, name, record):
+    def _circulation_fragment(self, document, name, record, find_reference, checked_waiting):
         if name == "loans":
-            self._loan_parents(document, record)
+            self._loan_parents(document, record, find_reference)
             linked = self.find("reservations", {"loan_id": record["id"], "status": "fulfilled"})
             if linked is not None:
                 linked = decode_record("reservations", linked)
                 document["reservations"].append(linked)
-                self._parent(document, "users", linked["user_id"])
-                self._parent(document, "movies", linked["movie_id"])
+                self._parent(document, "users", linked["user_id"], find_reference)
+                self._parent(document, "movies", linked["movie_id"], find_reference)
             for status, limit in (("pending", 10), ("active", 5)):
                 count = self.collection("loans").count_documents(
                     {"borrower_id": record["borrower_id"], "status": status},
@@ -152,18 +154,20 @@ class _MongoScope:
                 if count > limit:
                     raise ValueError("Borrower loan limit exceeded")
         else:
-            self._parent(document, "users", record["user_id"])
-            self._parent(document, "movies", record["movie_id"])
+            user_id = record["user_id"]
+            self._parent(document, "users", user_id, find_reference)
+            self._parent(document, "movies", record["movie_id"], find_reference)
             if record["loan_id"] is not None:
-                self._parent(document, "loans", record["loan_id"])
+                self._parent(document, "loans", record["loan_id"], find_reference)
                 for loan in document["loans"]:
-                    self._loan_parents(document, loan)
-            count = self.collection("reservations").count_documents(
-                {"user_id": record["user_id"], "status": "waiting"},
-                session=self._session,
-            )
-            if count > 10:
-                raise ValueError("Reservation limit exceeded")
+                    self._loan_parents(document, loan, find_reference)
+            if user_id not in checked_waiting:
+                count = self.collection("reservations").count_documents(
+                    {"user_id": user_id, "status": "waiting"}, session=self._session
+                )
+                if count > 10:
+                    raise ValueError("Reservation limit exceeded")
+                checked_waiting.add(user_id)
 
     def _validate_imported_catalogue(self):
         if not any(self._imported.values()):
@@ -197,6 +201,13 @@ class _MongoScope:
             if count > limit:
                 raise ValueError("Storage collection limit exceeded")
         self._validate_imported_catalogue()
+
+        # Validation runs after the command's writes against one transaction snapshot.
+        @cache
+        def find_reference(name, identity):
+            return self.find(name, {"_id": identity})
+
+        checked_waiting = set()
         for name, identities in self._dirty.items():
             for identity in identities:
                 if identity in self._imported.get(name, ()):
@@ -209,7 +220,9 @@ class _MongoScope:
                 document["revision"] = self._revision
                 document[name] = [record]
                 if name in ("loans", "reservations"):
-                    self._circulation_fragment(document, name, record)
+                    self._circulation_fragment(
+                        document, name, record, find_reference, checked_waiting
+                    )
                 elif name == "collections":
                     parent = self.find("users", {"_id": record["owner_id"]})
                     movie = self.find("movies", {"_id": record["movie_id"]})
@@ -587,22 +600,46 @@ class MongoPersonal(_Repository):
 
 
 class MongoEvents(_Repository):
+    def __init__(self, scope):
+        super().__init__(scope)
+        self._tail_and_size: tuple[int, int] | None = None
+
     def append(self, event: Record) -> None:
+        self.append_batch([event])
+
+    def append_batch(self, events: list[Record]) -> None:
         self._scope.check(write=True)
+        if not 1 <= len(events) <= 500:
+            raise ValueError("An audit event batch must contain 1 to 500 events")
         collection = self._scope.collection("audit_events")
-        last = collection.find_one(
-            {}, {"_id": 0, "_ordinal": 1}, sort=[("_ordinal", -1)], session=self._scope._session
+        tail, size = self._tail_and_size or (0, None)
+        if size is None:
+            last = collection.find_one(
+                {}, {"_id": 0, "_ordinal": 1}, sort=[("_ordinal", -1)], session=self._scope._session
+            )
+            if last is not None:
+                if type(last.get("_ordinal")) is not Int64 or not 1 <= last["_ordinal"]:
+                    raise ValueError("Audit append ordinal is invalid or exhausted")
+                tail = int(last["_ordinal"])
+        ordinal = tail + len(events)
+        if ordinal > INT64_MAX:
+            raise ValueError("Audit append ordinal is invalid or exhausted")
+        encoded = [
+            encode_record("audit_events", event, audit_ordinal=tail + position)
+            for position, event in enumerate(events, start=1)
+        ]
+        identities = [record["_id"] for record in encoded]
+        claims = [{"_id": identity, "kind": "audit_events"} for identity in identities]
+        self._scope.write(self._scope._database.entity_ids.insert_many, claims, ordered=True)
+        self._scope.write(collection.insert_many, encoded, ordered=True)
+        self._scope._dirty["audit_events"].update(identities)
+        # A writable unit of work serializes writers and owns all changes to this journal.
+        size = (
+            collection.count_documents({}, session=self._scope._session)
+            if size is None
+            else size + len(events)
         )
-        ordinal = 1
-        if last is not None:
-            if type(last.get("_ordinal")) is not Int64 or not 1 <= last["_ordinal"] < INT64_MAX:
-                raise ValueError("Audit append ordinal is invalid or exhausted")
-            ordinal = int(last["_ordinal"]) + 1
-        encoded = encode_record("audit_events", event, audit_ordinal=ordinal)
-        self._scope.claim(encoded["_id"], "audit_events")
-        self._scope.write(collection.insert_one, encoded)
-        self._scope._dirty["audit_events"].add(encoded["_id"])
-        excess = collection.count_documents({}, session=self._scope._session) - AUDIT_KEEP
+        excess = size - AUDIT_KEEP
         if excess > 0:
             with (
                 collection.find({}, {"_id": 1}, session=self._scope._session)
@@ -617,6 +654,7 @@ class MongoEvents(_Repository):
                     if deleted.deleted_count != len(identities):
                         raise ValueError("Audit retention deletion is inconsistent")
                     self._scope.release(identities, "audit_events")
+        self._tail_and_size = (ordinal, min(size, AUDIT_KEEP))
 
     def page(self, limit: int, offset: int) -> tuple[list[Record], int]:
         self._scope.check()

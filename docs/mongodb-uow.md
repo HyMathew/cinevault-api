@@ -74,6 +74,13 @@ comptée une seule fois dans l’état final de la transaction, après les suppr
 dépassement annule l’ensemble de la transaction et renvoie HTTP 503. La lecture,
 les mises à jour et les rejeux idempotents restent possibles au plafond.
 
+L'expiration des réservations écrit ses événements d'audit par lots de 500 au
+plus dans la transaction courante. MongoDB réserve les identifiants, attribue
+les ordinaux dans l'ordre du lot et retire les événements les plus anciens de
+la fenêtre de 2 000. Un lot rejeté annule aussi les changements de réservations.
+La validation finale réutilise les références déjà consultées dans son
+snapshot et vérifie une seule fois le quota d'attente de chaque membre touché.
+
 Les prédicats finaux vérifient aussi les attentes d'un compte désactivé,
 l'historique d'une copie déplacée/supprimée et toutes les références historiques
 d'un film supprimé. Ils s'exécutent après la commande : une dépendance peut donc

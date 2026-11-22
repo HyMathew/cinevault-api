@@ -349,6 +349,12 @@ class JsonEvents(_Repository):
         rows = self._scope.rows("audit_events", write=True)
         rows[:] = rows[-AUDIT_KEEP:]
 
+    def append_batch(self, events: list[Record]) -> None:
+        if not 1 <= len(events) <= 500:
+            raise ValueError("An audit event batch must contain 1 to 500 events")
+        for event in events:
+            self.append(event)
+
     def page(self, limit: int, offset: int) -> tuple[list[Record], int]:
         self._scope.check()
         if (
