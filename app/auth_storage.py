@@ -7,12 +7,15 @@ from .validation import is_unicode
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
 HASH = re.compile(r"^[0-9a-f]{64}$")
 ACCOUNT_CAPACITY = 10000
+SESSION_CAPACITY = 10000
 
 
 def validate_auth(data, ids, valid_uuid):
     usernames, user_ids, token_hashes, attempt_keys = set(), set(), set(), set()
-    if len(data["users"]) > ACCOUNT_CAPACITY or any(
-        len(data[name]) > 10000 for name in ("sessions", "auth_attempts")
+    if (
+        len(data["users"]) > ACCOUNT_CAPACITY
+        or len(data["sessions"]) > SESSION_CAPACITY
+        or len(data["auth_attempts"]) > 10000
     ):
         raise ValueError("Account storage limit exceeded")
     for user in data["users"]:

@@ -8,7 +8,8 @@ from threading import get_ident
 from bson import Int64
 from pymongo.errors import BulkWriteError, DuplicateKeyError, OperationFailure
 
-from ..auth_storage import USERNAME
+from ..auth_storage import SESSION_CAPACITY, USERNAME
+from ..business_storage import BUSINESS_CAPACITIES
 from ..catalogue_query import MovieQuery
 from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import _valid_uuid, empty_document, validate_document
@@ -17,6 +18,7 @@ from .mongo_model import INT64_MAX, collection_name, decode_record, encode_recor
 
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _TRANSFER_BATCH = 500
+_CAPACITIES = {"sessions": SESSION_CAPACITY, **BUSINESS_CAPACITIES}
 
 
 def _identity(value):
@@ -37,6 +39,7 @@ class _MongoScope:
         self._revision = revision
         self._owner = (getpid(), get_ident())
         self._failure = None
+        self._capacity_checks = set()
         self._dirty = {
             name: set()
             for name in (
@@ -185,6 +188,14 @@ class _MongoScope:
     def validate(self):
         """Validate touched entities and their final references, never a DB snapshot."""
         self.check()
+        # Count only collections that gained an entity, after all changes in this transaction.
+        for name in sorted(self._capacity_checks):
+            limit = _CAPACITIES[name]
+            count = self.collection(name).count_documents(
+                {}, hint="_id_", limit=limit + 1, session=self._session
+            )
+            if count > limit:
+                raise ValueError("Storage collection limit exceeded")
         self._validate_imported_catalogue()
         for name, identities in self._dirty.items():
             for identity in identities:
@@ -265,6 +276,8 @@ class _Repository:
         self._scope.claim(encoded["_id"], name)
         self._scope.write(self._scope.collection(name).insert_one, encoded)
         self._scope._dirty[name].add(encoded["_id"])
+        if name in _CAPACITIES:
+            self._scope._capacity_checks.add(name)
 
     def _save(self, name, record):
         self._scope.check(write=True)

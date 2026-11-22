@@ -67,6 +67,13 @@ temporaires en mémoire : aucun chargement ni enregistrement du document global.
 Cette validation conserve notamment `created_at <= last_seen <= expires_at`, les
 formes canoniques et les références de sessions/copies.
 
+Les plafonds globaux JSON v2 s’appliquent aux créations de sessions, d’entrées
+privées, de prêts et de réservations dans MongoDB. Chaque collection concernée est
+comptée une seule fois dans l’état final de la transaction, après les suppressions
+éventuelles. Les historiques clôturés sont comptés avec les éléments actifs. Un
+dépassement annule l’ensemble de la transaction et renvoie HTTP 503. La lecture,
+les mises à jour et les rejeux idempotents restent possibles au plafond.
+
 Les prédicats finaux vérifient aussi les attentes d'un compte désactivé,
 l'historique d'une copie déplacée/supprimée et toutes les références historiques
 d'un film supprimé. Ils s'exécutent après la commande : une dépendance peut donc

@@ -3,6 +3,7 @@
 from .validation import SUPPORTS, is_unicode
 
 KINDS = ("owned", "favorite", "watched", "watchlist", "custom")
+BUSINESS_CAPACITIES = {"collections": 10000, "loans": 10000, "reservations": 10000}
 AUDIT_TYPES = ("movie", "copy", "collection", "loan", "reservation", "import", "export", "recovery")
 AUDIT_ACTIONS = (
     tuple(
@@ -41,11 +42,8 @@ def valid_collection_attributes(kind, name, supports):
 
 
 def validate_business(document, ids, valid_uuid):
-    if (
-        len(document["collections"]) > 10000
-        or len(document["loans"]) > 10000
-        or len(document["reservations"]) > 10000
-        or len(document["audit_events"]) > 2000
+    if len(document["audit_events"]) > 2000 or any(
+        len(document[name]) > limit for name, limit in BUSINESS_CAPACITIES.items()
     ):
         raise ValueError("Business collection limit exceeded")
     users = {u["id"] for u in document["users"]}

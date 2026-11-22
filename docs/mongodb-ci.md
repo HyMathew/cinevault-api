@@ -92,5 +92,8 @@ Le compte applicatif limité exécute aussi `exercise_auth_service` (vrai Argon2
 budgets, horloge et révocations) et `exercise_catalogue_service` (droits, film et
 copie initiale atomiques, doublon, ETag et références). Leurs résultats sont
 conservés dans le reçu, en plus des cinq tests pytest administrant leur base
-jetable. Ces contrats de services ne sont pas présentés comme des endpoints HTTP
-Mongo activés, une migration ou une validation complète de la circulation.
+jetable. Les huit cas HTTP de `test_storage_capacities.py` comparent les deux
+moteurs au plafond exact des sessions, entrées, prêts et réservations. Les cas
+MongoDB passent par la factory avec une identité SCRAM limitée aux collections de
+chaque jeu de données. Les contrats de services et les cas HTTP ciblés couvrent
+ces opérations sur des jeux jetables.

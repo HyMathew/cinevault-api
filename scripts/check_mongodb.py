@@ -587,6 +587,7 @@ def main():
                 "pytest",
                 "-q",
                 "tests/test_mongo_persistence.py::RealMongoTests",
+                "tests/test_storage_capacities.py",
                 "-W",
                 "error",
                 "--junitxml=" + str(junit),
