@@ -22,9 +22,7 @@ class InvalidClientContext(Exception):
 
 def install_client_context(app):
     key = app.config.get("CLIENT_CONTEXT_KEY")
-    filename = app.config.get("CLIENT_CONTEXT_KEY_FILE") or os.environ.get(
-        "CLIENT_CONTEXT_KEY_FILE"
-    )
+    filename = app.config.get("CLIENT_CONTEXT_KEY_FILE")
     if key is None and filename:
         key = Path(filename).read_bytes()
     required = app.config.get(

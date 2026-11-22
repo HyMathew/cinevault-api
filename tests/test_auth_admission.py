@@ -314,6 +314,60 @@ def test_metadata_cache_cannot_alias_admission_state_or_lock(enterprise, suffix)
         )
 
 
+@pytest.mark.parametrize("source", ["config", "environment"])
+@pytest.mark.parametrize(
+    ("setting", "message"),
+    [
+        ("REGISTRATION_ADMISSION_FILE", "^Registration admission must be separate"),
+        ("METADATA_CACHE_FILE", "^Metadata cache must be separate"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("key_name", "state_name"),
+    [("context", "context"), ("context", "context.lock"), ("context.lock", "context")],
+)
+def test_mutable_state_cannot_alias_the_client_context_key(
+    enterprise, tmp_path, monkeypatch, source, setting, message, key_name, state_name
+):
+    client, _ = enterprise
+    key = tmp_path / key_name
+    key.write_bytes(CONTEXT_KEY)
+    config = {
+        **client.application.config,
+        "METADATA_ENABLED": True,
+        "WIKIMEDIA_USER_AGENT": "CineVault/0.1 (https://example.test/contact)",
+        setting: str(tmp_path / state_name),
+    }
+    if source == "environment":
+        config.pop("CLIENT_CONTEXT_KEY_FILE", None)
+        monkeypatch.setenv("CLIENT_CONTEXT_KEY_FILE", str(key))
+    else:
+        config["CLIENT_CONTEXT_KEY_FILE"] = str(key)
+
+    with pytest.raises(RuntimeError, match=message):
+        create_app(config)
+    assert key.read_bytes() == CONTEXT_KEY
+
+
+def test_explicit_context_key_file_takes_precedence_over_environment(
+    enterprise, tmp_path, monkeypatch
+):
+    client, _ = enterprise
+    environment_path = tmp_path / "admission.json"
+    key = tmp_path / "context"
+    key.write_bytes(CONTEXT_KEY)
+    monkeypatch.setenv("CLIENT_CONTEXT_KEY_FILE", str(environment_path))
+    app = create_app(
+        {
+            **client.application.config,
+            "CLIENT_CONTEXT_KEY_FILE": str(key),
+            "CLIENT_CONTEXT_REQUIRED": True,
+            "REGISTRATION_ADMISSION_FILE": str(environment_path),
+        }
+    )
+    assert app.extensions["client_context_key"] == CONTEXT_KEY
+
+
 def test_registration_capacity_is_checked_before_hashing(enterprise, monkeypatch):
     import uuid
 

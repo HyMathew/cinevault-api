@@ -27,6 +27,9 @@ def create_app(config=None):
     )
     if config:
         app.config.update(config)
+    app.config["CLIENT_CONTEXT_KEY_FILE"] = app.config.get(
+        "CLIENT_CONTEXT_KEY_FILE"
+    ) or os.environ.get("CLIENT_CONTEXT_KEY_FILE")
     backend = storage_backend(app.config)
     repo = Repository(app.config["DATA_FILE"]) if backend == "json" else None
 

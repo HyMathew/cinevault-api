@@ -35,7 +35,13 @@ def file_and_lock(path):
 
 def protected_file_paths(config):
     paths = set()
-    for key in ("DATA_FILE", "ENTERPRISE_DATA_FILE", "AUTH_THROTTLE_KEY_FILE", "MONGODB_URI_FILE"):
+    for key in (
+        "DATA_FILE",
+        "ENTERPRISE_DATA_FILE",
+        "AUTH_THROTTLE_KEY_FILE",
+        "CLIENT_CONTEXT_KEY_FILE",
+        "MONGODB_URI_FILE",
+    ):
         if config.get(key):
             paths.update(file_and_lock(config[key]))
     return paths
