@@ -18,7 +18,8 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
 
-IMAGE = "mongo@sha256:1d7a2d487c6465ea022474b90b65d6c91bb600b421b65880d8c6e141d6122200"
+IMAGE = "mongo@sha256:d819ca7f8e564eb253ae6dc9cac330386c56e6919f3570a74c04f04679433117"
+SERVER_VERSION = "8.0.38"
 LABEL = "cinevault.mongodb-contract"
 REPLICA_SET = "cinevault-ci"
 _CAPACITY_COLLECTIONS = {"sessions", "collection_entries", "loans", "reservations"}
@@ -618,7 +619,7 @@ def main():
         diagnostics.stage("verify_server_version")
         with MongoClient(uri, serverSelectionTimeoutMS=5000, socketTimeoutMS=10000) as client:
             build = client.admin.command("buildInfo")
-            if build["version"] != "8.0.34":
+            if build["version"] != SERVER_VERSION:
                 raise RuntimeError("Pinned MongoDB server version mismatch")
             receipt["server_version"] = build["version"]
             diagnostics.stage("application_privilege_contract")

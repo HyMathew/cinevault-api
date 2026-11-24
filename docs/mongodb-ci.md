@@ -8,8 +8,8 @@ Les jobs image et publication dépendent aussi de ce gate.
 
 ## Déploiement jetable
 
-Image MongoDB 8.0.34, Linux/amd64, épinglée au digest
-`sha256:1d7a2d487c6465ea022474b90b65d6c91bb600b421b65880d8c6e141d6122200`.
+Image MongoDB 8.0.38, Linux/amd64, épinglée au digest
+`sha256:d819ca7f8e564eb253ae6dc9cac330386c56e6919f3570a74c04f04679433117`.
 Un replica set `cinevault-ci` à un membre fournit les transactions utilisées par
 l’adaptateur ; cela ne constitue pas de la haute disponibilité.
 L’authentification SCRAM et un keyfile aléatoire sont actifs. Le bootstrap utilise
@@ -80,11 +80,10 @@ ne désactive la protection du moteur, aucun test n’est ignoré.
 
 Ce choix de runner doit être réexaminé avant sa fin de support GitHub annoncée,
 ou dès qu’un runner au noyau compatible est disponible. Les VM du laboratoire
-utilisent 6.8 ; aucune modification de leur noyau n’est nécessaire. Les nouvelles
-versions Mongo8.0.37/8.0.38 annoncées le 10novembre doivent aussi être qualifiées
-avant livraison : leurs tags Docker officiels retournaient404 lors de la lecture
-du registre le 11novembre. La preuve8.0.34 reste datée et n’est pas présentée comme
-validation de ces nouvelles versions ou de leurs corrections de sécurité.
+utilisent 6.8. L’image Docker officielle 8.0.38 a été vérifiée par digest le
+25 novembre et a rejoué le contrat avec un compte applicatif limité, sur un
+replica set isolé. Les reçus antérieurs mentionnent la version 8.0.34 utilisée
+à l’époque. [Notes de version MongoDB](https://www.mongodb.com/docs/manual/release-notes/8.0/).
 
 ## Services communs dans le gate
 
