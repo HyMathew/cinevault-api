@@ -23,15 +23,26 @@ def context():
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     metadata = event.get("repository", {})
     branch = metadata.get("default_branch")
+    event_name = os.environ.get("GITHUB_EVENT_NAME")
+    ref = os.environ.get("GITHUB_REF")
+    inputs = event.get("inputs") or {}
+    requested = inputs.get("candidate_commit", "") if isinstance(inputs, dict) else None
+    if metadata.get("full_name") != repository or not isinstance(branch, str) or not branch:
+        raise ValueError("Publication requires a trusted repository event")
     if (
-        metadata.get("full_name") != repository
-        or not isinstance(branch, str)
-        or not branch
-        or os.environ.get("GITHUB_EVENT_NAME") not in ("push", "workflow_dispatch")
-        or os.environ.get("GITHUB_REF") != "refs/heads/" + branch
+        requested == ""
+        and event_name in ("push", "workflow_dispatch")
+        and ref == "refs/heads/" + branch
     ):
-        raise ValueError("Publication requires a trusted default-branch event")
-    return repository, revision
+        return repository, revision, "default"
+    if (
+        event_name == "workflow_dispatch"
+        and ref == "refs/heads/quality/cinevault-v2"
+        and repository in {"HyMathew/cinevault-api", "HyMathew/cinevault-web"}
+        and requested == revision
+    ):
+        return repository, revision, "candidate"
+    raise ValueError("Publication requires the default branch or an exact candidate dispatch")
 
 
 def verified_scan_provenance(gate, reports, identity):
@@ -138,7 +149,7 @@ def publish(root, actor, token):
     receipt = {"published": False, "scope": "Registry push; anonymous pull not yet verified"}
     destination.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     try:
-        repository, revision = context()
+        repository, revision, channel = context()
         image, identity, provenance = gated_image(root, repository, revision)
         if (
             not isinstance(actor, str)
@@ -161,6 +172,7 @@ def publish(root, actor, token):
         receipt.update(
             repository=repository,
             source_commit=revision,
+            publication_channel=channel,
             image_id=identity,
             tag=tag,
             scan_provenance=provenance,

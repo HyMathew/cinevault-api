@@ -159,6 +159,48 @@ def test_changed_local_tag_is_rejected_before_login(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
+    ("owner", "event", "ref", "expected", "permitted"),
+    [
+        ("HyMathew", "workflow_dispatch", "refs/heads/quality/cinevault-v2", REVISION, True),
+        ("HyMathew", "push", "refs/heads/quality/cinevault-v2", REVISION, False),
+        ("HyMathew", "workflow_dispatch", "refs/heads/quality/cinevault-v2", "", False),
+        ("HyMathew", "workflow_dispatch", "refs/heads/quality/cinevault-v2", "d" * 40, False),
+        ("HyMathew", "workflow_dispatch", "refs/heads/feature", REVISION, False),
+        ("Fork", "workflow_dispatch", "refs/heads/quality/cinevault-v2", REVISION, False),
+    ],
+)
+def test_candidate_dispatch_is_bound_to_the_official_branch_and_full_commit(
+    tmp_path, monkeypatch, owner, event, ref, expected, permitted
+):
+    module = publisher()
+    setup_context(tmp_path, monkeypatch)
+    repo = owner + "/cinevault-api"
+    path = tmp_path / "event.json"
+    path.write_text(
+        json.dumps(
+            {
+                "repository": {"full_name": repo, "default_branch": "main"},
+                "inputs": {"candidate_commit": expected},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_REPOSITORY", repo)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    monkeypatch.setenv("GITHUB_REF", ref)
+    calls = []
+    fake_docker(monkeypatch, module, calls)
+    if permitted:
+        receipt = module.publish(tmp_path, "Example", TOKEN)
+        assert receipt["published"] and receipt["publication_channel"] == "candidate"
+        assert receipt["tag"] == "ghcr.io/hymathew/cinevault-api:sha-" + REVISION
+    else:
+        with pytest.raises(ValueError):
+            module.publish(tmp_path, "Example", TOKEN)
+        assert not calls
+
+
+@pytest.mark.parametrize(
     "defect",
     ["report_bytes", "report_missing", "report_severity", "config", "identity", "archive_digest"],
 )
