@@ -81,7 +81,11 @@ Le contrôle CI construit pour Linux amd64 avec BuildKit et fixe
 couches. L'installation Python omet les fichiers `.pyc` et l'installation
 APK conserve sa base de paquets sans son journal horodaté. Le compte de
 service reste verrouillé avec une date fixe dans `/etc/shadow`.
-La reproduction par digest suppose les mêmes sources, la même version de
-BuildKit et les mêmes paquets amont. Les dépôts APK peuvent évoluer entre
-deux dates de construction.
+Les fichiers `docker/alpine-runtime/*.sha256` fixent les archives APK
+par architecture. Le build vérifie leur SHA-256 avant l'installation
+hors réseau, puis APK vérifie leur signature Alpine. Pour mettre un
+paquet à jour, remplacer son nom d'archive et son empreinte dans les
+fichiers concernés, puis relancer le contrôle d'image.
+La reproduction par digest suppose aussi les mêmes sources, la même
+version de BuildKit et les mêmes paquets Python amont.
 [Construction reproductible avec BuildKit](https://docs.docker.com/build/ci/github-actions/reproducible-builds/).
