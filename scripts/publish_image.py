@@ -87,6 +87,11 @@ def verified_scan_provenance(gate, reports, identity):
         raise ValueError("Image gate refers outside its scan attempt directory")
     raw = image_archive.read_report(directory / image_archive.REPORT_NAME)
     report, current = image_archive.inspect_scan_report(raw, config)
+    current.update(
+        image_archive.inspect_sbom(
+            image_archive.read_report(directory / image_archive.SBOM_NAME), config
+        )
+    )
     result = image_archive.scan_result(report)
     if any(provenance.get(key) != value for key, value in current.items()) or any(
         gate.get(key) != value for key, value in result.items()

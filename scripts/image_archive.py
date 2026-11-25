@@ -15,6 +15,11 @@ SCANNER = (
 )
 SCANNER_VERSION = "0.121.2"
 REPORT_NAME = "image-vulnerabilities.json"
+CATALOGER = (
+    "anchore/syft:v1.57.2@sha256:9c2563b5fb56e9f5e9cb5b6cf10b9ab0dc6a6d1c1b1e24165bcdf9c8c85a9584"
+)
+CATALOGER_VERSION = "1.57.2"
+SBOM_NAME = "image-sbom.json"
 SEVERITIES = ("Unknown", "Negligible", "Low", "Medium", "High", "Critical")
 MAX_REPORT = 32 * 1024**2
 MAX_METADATA = 4 * 1024**2
@@ -353,33 +358,64 @@ def inspect_image_archive(path, docker_id):
     }
 
 
+def _image_source(source, target, archive_config_digest):
+    metadata = source[target]
+    config = base64.b64decode(metadata["config"], validate=True)
+    manifest = base64.b64decode(metadata["manifest"], validate=True)
+    if len(config) > MAX_METADATA or len(manifest) > MAX_METADATA:
+        raise ValueError("Oversized scanner image metadata")
+    document = read_json(manifest)
+    manifest_config = document["config"]
+    manifest_digest = digest_bytes(manifest)
+    if (
+        source["type"] != "image"
+        or metadata["userInput"] != "/image.tar"
+        or metadata["imageID"] != archive_config_digest
+        or digest_bytes(config) != archive_config_digest
+        or metadata["manifestDigest"] != manifest_digest
+        or document["schemaVersion"] != 2
+        or manifest_config["digest"] != archive_config_digest
+        or manifest_config["size"] != len(config)
+    ):
+        raise ValueError("Scanner evidence does not identify the saved image")
+    return manifest_digest
+
+
+def inspect_sbom(raw, archive_config_digest):
+    """Check that Syft catalogued the inspected Docker archive."""
+    if not 0 < len(raw) <= MAX_REPORT:
+        raise ValueError("Invalid Syft inventory size")
+    try:
+        document = read_json(raw)
+        manifest = _image_source(document["source"], "metadata", archive_config_digest)
+        descriptor, artifacts = document["descriptor"], document["artifacts"]
+        if (
+            descriptor["name"] != "syft"
+            or descriptor["version"] != CATALOGER_VERSION
+            or not isinstance(artifacts, list)
+            or not artifacts
+        ):
+            raise ValueError("Invalid Syft inventory or cataloger version")
+    except (KeyError, TypeError, AttributeError):
+        raise ValueError("Malformed Syft image evidence") from None
+    return {
+        "sbom_sha256": digest_bytes(raw),
+        "sbom_config_digest": archive_config_digest,
+        "sbom_manifest_digest": manifest,
+        "sbom_components": len(artifacts),
+        "sbom_cataloger": CATALOGER,
+    }
+
+
 def inspect_scan_report(raw, archive_config_digest):
     """Verify the exact JSON bytes and Grype's embedded reconstructed image metadata."""
     if not 0 < len(raw) <= MAX_REPORT:
         raise ValueError("Invalid Grype report size")
     try:
         report = read_json(raw)
-        source = report["source"]
-        target = source["target"]
-        config = base64.b64decode(target["config"], validate=True)
-        manifest = base64.b64decode(target["manifest"], validate=True)
-        if len(config) > MAX_METADATA or len(manifest) > MAX_METADATA:
-            raise ValueError("Oversized Grype image metadata")
-        manifest_document = read_json(manifest)
-        manifest_config = manifest_document["config"]
-        manifest_digest = digest_bytes(manifest)
-        if (
-            source["type"] != "image"
-            or target["userInput"] != "/image.tar"
-            or target["imageID"] != archive_config_digest
-            or digest_bytes(config) != archive_config_digest
-            or target["manifestDigest"] != manifest_digest
-            or manifest_document["schemaVersion"] != 2
-            or manifest_config["digest"] != archive_config_digest
-            or manifest_config["size"] != len(config)
-            or not isinstance(report["matches"], list)
-        ):
-            raise ValueError("Grype report does not identify the saved image")
+        manifest_digest = _image_source(report["source"], "target", archive_config_digest)
+        if not isinstance(report["matches"], list):
+            raise ValueError("Grype report has no matches list")
     except (KeyError, TypeError, AttributeError):
         raise ValueError("Malformed Grype image evidence") from None
     return report, {

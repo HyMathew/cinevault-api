@@ -13,7 +13,12 @@ import tarfile
 import pytest
 
 from scripts import check_image
-from scripts.image_archive import inspect_image_archive, inspect_scan_report
+from scripts.image_archive import (
+    CATALOGER_VERSION,
+    inspect_image_archive,
+    inspect_sbom,
+    inspect_scan_report,
+)
 
 INDEX = "application/vnd.oci.image.index.v1+json"
 MANIFEST = "application/vnd.oci.image.manifest.v1+json"
@@ -151,6 +156,26 @@ def scan_report(config, *, severity=None):
     }
 
 
+def sbom_report(config):
+    return {
+        "source": {"type": "image", "metadata": scan_report(config)["source"]["target"]},
+        "descriptor": {"name": "syft", "version": CATALOGER_VERSION},
+        "artifacts": [{"name": "synthetic", "type": "python", "version": "1"}],
+    }
+
+
+def test_sbom_refuses_mismatched_config_or_empty_inventory():
+    config = b'{"os":"linux"}'
+    document = sbom_report(config)
+    evidence = inspect_sbom(encoded(document), digest(config))
+    assert evidence["sbom_components"] == 1
+    with pytest.raises(ValueError, match="does not identify"):
+        inspect_sbom(encoded(document), digest(b"something else"))
+    document["artifacts"].clear()
+    with pytest.raises(ValueError, match="Invalid Syft inventory"):
+        inspect_sbom(encoded(document), digest(config))
+
+
 def test_oci_index_links_docker_id_to_exact_legacy_config(tmp_path, archive_data):
     path = tmp_path / "image.tar"
     index, runtime, config, _, members = archive_data
@@ -247,7 +272,7 @@ def test_grype_attestation_must_match_source_config(archive_data, defect):
         inspect_scan_report(encoded(report), expected)
 
 
-@pytest.mark.parametrize("result", ["success", "high", "archive_changed"])
+@pytest.mark.parametrize("result", ["success", "high", "archive_changed", "sbom_changed"])
 def test_check_binds_exact_scan_bytes_without_promoting_failed_scans(
     tmp_path, archive_data, result
 ):
@@ -259,6 +284,11 @@ def test_check_binds_exact_scan_bytes_without_promoting_failed_scans(
         encoded(scan_report(config, severity="High" if result == "high" else None)) + b"\r\n"
     )
     scan = subprocess.CompletedProcess([], 2 if result == "high" else 0, raw_report, b"")
+    inventory = encoded(sbom_report(config))
+    sbom_evidence = inspect_sbom(inventory, digest(config))
+    (tmp_path / "image-sbom.json").write_bytes(
+        inventory + (b"\n" if result == "sbom_changed" else b"")
+    )
     receipt = {"scan_passed": False}
     if result == "archive_changed":
         # Keep the file size and format valid so the mismatch is caught by SHA-256.
@@ -266,14 +296,19 @@ def test_check_binds_exact_scan_bytes_without_promoting_failed_scans(
             archive.seek(-1, os.SEEK_END)
             archive.write(b"x")
         with pytest.raises(ValueError, match="changed during"):
-            check_image.record_scan(receipt, tmp_path, path, evidence, scan)
+            check_image.record_scan(receipt, tmp_path, path, evidence, scan, sbom_evidence)
         assert "scan_provenance" not in receipt
     elif result == "high":
         with pytest.raises(RuntimeError, match="Image scan blocked"):
-            check_image.record_scan(receipt, tmp_path, path, evidence, scan)
+            check_image.record_scan(receipt, tmp_path, path, evidence, scan, sbom_evidence)
+    elif result == "sbom_changed":
+        with pytest.raises(ValueError, match="inventory changed"):
+            check_image.record_scan(receipt, tmp_path, path, evidence, scan, sbom_evidence)
+        assert "scan_provenance" not in receipt
     else:
-        check_image.record_scan(receipt, tmp_path, path, evidence, scan)
+        check_image.record_scan(receipt, tmp_path, path, evidence, scan, sbom_evidence)
     assert (tmp_path / "image-vulnerabilities.json").read_bytes() == raw_report
     assert receipt["scan_passed"] is (result == "success")
-    if result != "archive_changed":
+    if result in {"success", "high"}:
         assert receipt["scan_provenance"]["scan_report_sha256"] == digest(raw_report)
+        assert receipt["scan_provenance"]["sbom_sha256"] == digest(inventory)

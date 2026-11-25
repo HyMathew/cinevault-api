@@ -108,7 +108,52 @@ def export_image_archive(identity, archive):
     archive.chmod(0o444)
 
 
-def record_scan(receipt, reports, archive, archive_evidence, scan):
+def catalog_image(reports, archive, archive_evidence, name, cache_volume):
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            name,
+            "--network",
+            "none",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges:true",
+            "--read-only",
+            "--user",
+            "65532:65532",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=67108864,mode=1777",
+            "-e",
+            "TMPDIR=/cache/tmp",
+            "-e",
+            "SYFT_CHECK_FOR_APP_UPDATE=false",
+            "--mount",
+            f"type=bind,source={archive},target=/image.tar,readonly",
+            "--mount",
+            f"type=volume,source={cache_volume},target=/cache",
+            image_archive.CATALOGER,
+            "scan",
+            "docker-archive:/image.tar",
+            "-o",
+            "syft-json",
+        ],
+        capture_output=True,
+        timeout=600,
+    )
+    (reports / "image-catalog.log").write_bytes(result.stderr)
+    if result.returncode:
+        raise RuntimeError("Syft inventory failed; inspect the cataloger log")
+    evidence = image_archive.inspect_sbom(result.stdout, archive_evidence["archive_config_digest"])
+    inventory = reports / image_archive.SBOM_NAME
+    inventory.write_bytes(result.stdout)
+    return evidence
+
+
+def record_scan(receipt, reports, archive, archive_evidence, scan, sbom_evidence):
     (reports / image_archive.REPORT_NAME).write_bytes(scan.stdout)
     (reports / "image-scan.log").write_bytes(scan.stderr)
     receipt["scanner_exit_code"] = scan.returncode
@@ -117,8 +162,17 @@ def record_scan(receipt, reports, archive, archive_evidence, scan):
     report, scan_evidence = image_archive.inspect_scan_report(
         scan.stdout, archive_evidence["archive_config_digest"]
     )
+    if (
+        image_archive.inspect_sbom(
+            image_archive.read_report(reports / image_archive.SBOM_NAME),
+            archive_evidence["archive_config_digest"],
+        )
+        != sbom_evidence
+    ):
+        raise ValueError("Syft inventory changed during vulnerability scanning")
     receipt.update(
-        image_archive.scan_result(report), scan_provenance={**archive_evidence, **scan_evidence}
+        image_archive.scan_result(report),
+        scan_provenance={**archive_evidence, **scan_evidence, **sbom_evidence},
     )
     counts = receipt["severity_counts"]
     if (
@@ -153,6 +207,7 @@ def main():
     }
     container = "cinevault-ci-" + attempt
     scanner_container = container + "-scanner"
+    cataloger_container = container + "-cataloger"
     helper_container = container + "-init"
     cache_volume = container + "-cache"
     volume_attempted = False
@@ -296,11 +351,14 @@ def main():
             ],
             log=reports / "cache-init.log",
         )
-        # The scanner receives only this archive. No daemon socket or host credentials.
+        # Both tools independently receive the same immutable archive.
         with tempfile.TemporaryDirectory(prefix="cinevault-image-") as directory:
             archive = Path(directory) / "image.tar"
             export_image_archive(receipt["image_id"], archive)
             archive_evidence = image_archive.inspect_image_archive(archive, receipt["image_id"])
+            sbom_evidence = catalog_image(
+                reports, archive, archive_evidence, cataloger_container, cache_volume
+            )
             scan = subprocess.run(
                 [
                     "docker",
@@ -337,7 +395,7 @@ def main():
                 capture_output=True,
                 timeout=600,
             )
-            record_scan(receipt, reports, archive, archive_evidence, scan)
+            record_scan(receipt, reports, archive, archive_evidence, scan, sbom_evidence)
     except (
         OSError,
         ValueError,
@@ -361,7 +419,7 @@ def main():
             except (OSError, subprocess.TimeoutExpired) as exc:
                 receipt["log_error"] = type(exc).__name__
         receipt["cleanup"] = []
-        for name in (scanner_container, helper_container, container):
+        for name in (scanner_container, cataloger_container, helper_container, container):
             item = {"container": name, "success": False}
             try:
                 result = subprocess.run(

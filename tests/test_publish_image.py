@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.image_archive import SCANNER
-from tests.test_image_archive import digest, encoded, scan_report
+from scripts.image_archive import SCANNER, inspect_sbom
+from tests.test_image_archive import digest, encoded, sbom_report, scan_report
 
 REVISION = "a" * 40
 IMAGE_ID = "sha256:" + "b" * 64
@@ -53,6 +53,8 @@ def setup_context(tmp_path, monkeypatch):
     ]
     raw = encoded(report)
     (attempt / "image-vulnerabilities.json").write_bytes(raw)
+    inventory = encoded(sbom_report(config))
+    (attempt / "image-sbom.json").write_bytes(inventory)
     gate = {
         "image": "cinevault-api:ci-" + REVISION,
         "image_id": IMAGE_ID,
@@ -74,6 +76,7 @@ def setup_context(tmp_path, monkeypatch):
             "scan_report_sha256": digest(raw),
             "grype_config_digest": digest(config),
             "grype_manifest_digest": report["source"]["target"]["manifestDigest"],
+            **inspect_sbom(inventory, digest(config)),
         },
     }
     (reports / "image-check.json").write_text(json.dumps(gate), encoding="utf-8")
@@ -306,3 +309,15 @@ def test_failed_push_invalidates_success_and_destroys_credentials(tmp_path, monk
     assert result["published"] is False
     configuration = next(kw["env"]["DOCKER_CONFIG"] for args, kw in calls if args[1] == "login")
     assert not Path(configuration).exists()
+
+
+def test_tampered_sbom_refuses_before_registry_credentials(tmp_path, monkeypatch):
+    module = publisher()
+    gate = setup_context(tmp_path, monkeypatch)
+    dest = tmp_path / "reports" / gate["attempt_directory"] / "image-sbom.json"
+    dest.write_bytes(dest.read_bytes() + b"\n")
+    calls = []
+    fake_docker(monkeypatch, module, calls)
+    with pytest.raises(ValueError, match="no longer matches"):
+        module.publish(tmp_path, "Example", TOKEN)
+    assert not calls

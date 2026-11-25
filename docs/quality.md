@@ -67,3 +67,11 @@ Sigstore, le dépôt, la branche, la révision exacte et le workflow signataire
 sur l'image OCI à ce digest. Les deux jobs conservent l'attestation et le
 résultat de sa vérification. Le staging exige ces preuves avec le scan et
 le reçu de publication du même run.
+
+Syft inventorie l'archive Docker exacte dans `image-sbom.json`, avec
+son digest de configuration et son nombre de composants. Grype analyse
+directement la même archive avec le seuil High/Critical. Le job conserve
+l'inventaire et le scan dans `image-audit`, même si Grype bloque l'image.
+Le script de publication relit les deux rapports et compare leurs
+empreintes au reçu du job.
+[Formats et cibles Grype](https://oss.anchore.com/docs/guides/vulnerability/scan-targets/).
