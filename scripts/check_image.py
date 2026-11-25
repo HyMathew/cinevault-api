@@ -1,6 +1,7 @@
 """Build, run non-root health checks, then scan an immutable image archive."""
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -82,7 +83,7 @@ def cleanup_volume(name, attempt):
     return item
 
 
-def command(args, *, log=None, env=None, timeout=600):
+def command(args, *, log=None, env=None, stdin=None, timeout=600):
     result = subprocess.run(
         args,
         text=True,
@@ -90,6 +91,7 @@ def command(args, *, log=None, env=None, timeout=600):
         errors="replace",
         capture_output=True,
         env=env,
+        stdin=stdin,
         timeout=timeout,
     )
     if log:
@@ -99,6 +101,81 @@ def command(args, *, log=None, env=None, timeout=600):
             f"{args[0]} {args[1]} failed with exit {result.returncode}; inspect reports"
         )
     return result.stdout
+
+
+def build_image(root, reports, image, iidfile, builder, source_commit):
+    options = [
+        "--pull",
+        "--platform",
+        "linux/amd64",
+        "--build-arg",
+        "SOURCE_DATE_EPOCH=1760000000",
+        "--provenance=false",
+        "--sbom=false",
+        "--output",
+        "type=docker,oci-mediatypes=true,rewrite-timestamp=true",
+        "--iidfile",
+        str(iidfile),
+        "--tag",
+        image,
+    ]
+    log = reports / "docker-build.log"
+    if builder is None:
+        command(["docker", "build", *options, str(root)], log=log)
+        return None
+
+    metadata_file = reports / "build-metadata.json"
+    with tempfile.TemporaryFile() as source:
+        archive = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "core.eol=lf",
+                "archive",
+                "--format=tar",
+                source_commit,
+            ],
+            stdout=source,
+            stderr=subprocess.PIPE,
+            timeout=60,
+        )
+        if archive.returncode:
+            raise RuntimeError("Could not archive the requested Git commit for Docker")
+        source.seek(0)
+        source_digest = "sha256:" + hashlib.file_digest(source, "sha256").hexdigest()
+        source.seek(0)
+        command(
+            [
+                "docker",
+                "buildx",
+                "build",
+                "--builder",
+                builder,
+                "--no-cache",
+                "--metadata-file",
+                str(metadata_file),
+                *options,
+                "-",
+            ],
+            log=log,
+            stdin=source,
+        )
+
+    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    config = metadata["containerimage.config.digest"]
+    manifest = metadata["containerimage.digest"]
+    if not image_archive.is_digest(config) or not image_archive.is_digest(manifest):
+        raise ValueError("BuildKit did not identify the image config and manifest")
+    return {
+        "source_commit": source_commit,
+        "source_tar_digest": source_digest,
+        "config_digest": config,
+        "manifest_digest": manifest,
+    }
 
 
 def export_image_archive(identity, archive):
@@ -188,7 +265,13 @@ def record_scan(receipt, reports, archive, archive_evidence, scan, sbom_evidence
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, help="Local application image tag to build")
+    parser.add_argument("--builder", help="Buildx builder for a canonical Git context")
+    parser.add_argument("--source-commit", help="Full Git commit to archive for the build")
     args = parser.parse_args()
+    if bool(args.builder) != bool(args.source_commit):
+        parser.error("--builder and --source-commit must be supplied together")
+    if args.source_commit and not re.fullmatch(r"[a-f0-9]{40}", args.source_commit):
+        parser.error("Source commit must be a full SHA-1 Git identity")
     if not re.fullmatch(r"[a-z0-9][a-z0-9._/:@-]+", args.image):
         parser.error("Invalid image reference")
     root = Path(__file__).resolve().parents[1]
@@ -221,30 +304,14 @@ def main():
     created = False
     try:
         iidfile = reports / "build.iid"
-        command(
-            [
-                "docker",
-                "build",
-                "--pull",
-                "--platform",
-                "linux/amd64",
-                "--build-arg",
-                "SOURCE_DATE_EPOCH=1760000000",
-                "--provenance=false",
-                "--sbom=false",
-                "--output",
-                "type=docker,oci-mediatypes=true,rewrite-timestamp=true",
-                "--iidfile",
-                str(iidfile),
-                "--tag",
-                args.image,
-                str(root),
-            ],
-            log=reports / "docker-build.log",
-        )
+        build = build_image(root, reports, args.image, iidfile, args.builder, args.source_commit)
+        if build is not None:
+            receipt["build_provenance"] = build
         identity = iidfile.read_text(encoding="utf-8").strip()
         if not re.fullmatch(r"sha256:[a-f0-9]{64}", identity):
             raise RuntimeError("Build did not produce a valid immutable image identity")
+        if build is not None and identity not in (build["config_digest"], build["manifest_digest"]):
+            raise RuntimeError("Loaded image identity differs from the BuildKit export")
         info = json.loads(command(["docker", "image", "inspect", identity]))[0]
         if info["Id"] != identity:
             raise RuntimeError("Inspected image differs from the build receipt")
@@ -364,6 +431,11 @@ def main():
             archive = Path(directory) / "image.tar"
             export_image_archive(receipt["image_id"], archive)
             archive_evidence = image_archive.inspect_image_archive(archive, receipt["image_id"])
+            if (
+                build is not None
+                and archive_evidence["archive_config_digest"] != build["config_digest"]
+            ):
+                raise RuntimeError("Image archive config differs from the BuildKit export")
             sbom_evidence = catalog_image(
                 reports, archive, archive_evidence, cataloger_container, cache_volume
             )
