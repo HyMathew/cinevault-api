@@ -47,7 +47,7 @@ Rapports sous `reports/`, exclus de Git et du contexte Docker : résultats d’a
 
 ## GitHub Actions
 
-Le workflow teste Ubuntu et Windows et audite sur chacun de ces OS les trois ensembles de dépendances, y compris les paquets conditionnels Windows. Il exécute aussi lint/format/docs/contrat puis construit et scanne l'image. Les actions officielles sont fixées à des commits et les identifiants de checkout ne sont pas conservés. Les jobs de qualité, tests et audit d'image ont contents:read. Un job distinct de publication, limité aux événements autorisés sur la branche par défaut, ajoute packages:write. Aucun déploiement du laboratoire n'est automatique. Les rapports sont gardés sept jours, y compris lorsqu'un contrôle échoue.
+Le workflow teste Ubuntu et Windows et audite sur chacun de ces OS les trois ensembles de dépendances, y compris les paquets conditionnels Windows. Il exécute aussi lint/format/docs/contrat puis construit et scanne l'image. Les actions officielles sont fixées à des commits et les identifiants de checkout ne sont pas conservés. Les jobs de qualité, tests et audit d'image ont contents:read. Un job distinct ajoute `packages: write` pour les publications autorisées. Aucun déploiement du laboratoire n'est automatique. Les rapports sont gardés sept jours, y compris lorsqu'un contrôle échoue.
 
 La configuration du workflow et une exécution locale ne sont pas une réussite de CI distante. La publication n’intervient qu’après audit ; une exécution GitHub réelle devra être reliée à son commit et à son URL avant toute affirmation de réussite ou ajout d’un badge.
 
@@ -55,8 +55,15 @@ Sources des outils : [Ruff](https://docs.astral.sh/ruff/configuration/), [pip-au
 
 ## Publication des images
 
-Les jobs `quality` et `tests` sur Windows/Ubuntu doivent réussir avant le contrôle d'image sur Ubuntu. Deux jobs d'image sont mutuellement exclusifs : `image`, en lecture seule pour les PR et autres branches ; `publish-image`, pour un push ou lancement manuel de la branche par défaut. Chacun construit l'image, vérifie son démarrage non privilégié, applique le seuil Grype élevé/critique et vérifie son nettoyage. Le second publie ensuite **cette même identité locale** dans GHCR avec `scripts/publish_image.py`, sans reconstruction intermédiaire. Le filtre porte sur le job privilégié entier ; le helper revérifie aussi le contexte.
+Les jobs `quality` et `tests` sur Windows/Ubuntu doivent réussir avant le contrôle d'image sur Ubuntu. Deux jobs d'image sont mutuellement exclusifs : `image`, en lecture seule pour les PR et autres branches ; `publish-image`, pour un push ou lancement manuel de la branche par défaut, ou une demande explicite avec le SHA complet de `quality/cinevault-v2` dans le dépôt officiel. Chacun construit l'image, vérifie son démarrage non privilégié, applique le seuil Grype élevé/critique et vérifie son nettoyage. Le second publie ensuite **cette même identité locale** dans GHCR avec `scripts/publish_image.py`, sans reconstruction intermédiaire. Le filtre porte sur le job privilégié entier ; le helper revérifie aussi le contexte.
 
 Le helper revérifie l'événement, la branche, la révision, le reçu du gate et l'ID local avant toute connexion au registre. Il relit les octets du rapport de la tentative et vérifie son empreinte, sa configuration et ses résultats. Le reçu de publication conserve également `scan_provenance`. Le helper utilise le jeton temporaire GitHub Actions avec `packages: write`, transmis uniquement à cette étape. L'identification Docker passe par l'entrée standard et un dossier de configuration temporaire supprimé à la sortie ; aucun jeton ne figure dans les arguments ou le reçu. Une nouvelle tentative invalide le précédent reçu avant toute opération Docker.
 
 Le tag `sha-<révision complète>` facilite le rapprochement avec Git ; il reste un tag modifiable. `reports/registry-publication.json` conserve le digest renvoyé par le registre dès son acquittement, même si le nettoyage échoue ensuite ; `published` ne devient vrai qu'après nettoyage réussi. Employer une référence `ghcr.io/…@sha256:…` pour le déploiement. Une publication réussie ne prouve pas la visibilité publique du paquet : celle-ci et le tirage anonyme depuis les nœuds doivent être vérifiés séparément. Cette procédure décrit le workflow configuré ; seule une exécution GitHub terminée peut prouver sa réussite pour un commit.
+
+Après une publication réussie dans le dépôt officiel, un job distinct
+signe le digest indiqué dans le reçu. Un second job vérifie la signature
+Sigstore, le dépôt, la branche, la révision exacte et le workflow signataire
+sur l'image OCI à ce digest. Les deux jobs conservent l'attestation et le
+résultat de sa vérification. Le staging exige ces preuves avec le scan et
+le reçu de publication du même run.
