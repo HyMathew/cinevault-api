@@ -1,12 +1,15 @@
 """Validate exact pins and their installed transitive closure without network access."""
 
 import argparse
+import re
 from importlib import metadata
 from pathlib import Path
 
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+
+HASHED_LINE = re.compile(r"([A-Za-z0-9_.-]+)==([^\s;]+)(?:\s+--hash=sha256:[0-9a-f]{64})+")
 
 
 def read_requirements(path, seen=None):
@@ -74,16 +77,54 @@ def lock_errors(path, environment=None):
     return sorted(set(errors))
 
 
+def docker_runtime_errors(requirements, lock):
+    linux = {"sys_platform": "linux", "platform_system": "Linux", "os_name": "posix"}
+    expected = {
+        canonicalize_name(req.name): str(req.specifier)
+        for req in read_requirements(requirements)
+        if not req.marker or req.marker.evaluate(linux)
+    }
+    selected = {}
+    errors = []
+    content = lock.read_text(encoding="utf-8").replace("\\\n", "")
+    for number, line in enumerate(content.splitlines(), start=1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = HASHED_LINE.fullmatch(line)
+        if match is None:
+            errors.append(f"{lock.name}:{number}: expected an exact pin and wheel SHA-256 hashes")
+            continue
+        name = canonicalize_name(match[1])
+        if name in selected:
+            errors.append(f"{lock.name}:{number}: duplicate pin for {name}")
+        selected[name] = "==" + match[2]
+    for name in sorted(expected.keys() | selected.keys()):
+        if expected.get(name) != selected.get(name):
+            errors.append(
+                f"{name}: Docker pin {selected.get(name)} differs from Linux pin {expected.get(name)}"
+            )
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("requirements", nargs="+", type=Path)
+    parser.add_argument("--docker-runtime", type=Path)
     args = parser.parse_args()
-    errors = [error for path in args.requirements for error in lock_errors(path)]
+    if args.docker_runtime:
+        if len(args.requirements) != 1:
+            parser.error("--docker-runtime requires one portable requirements file")
+        errors = docker_runtime_errors(args.requirements[0], args.docker_runtime)
+        success = "Docker wheel SHA-256 lock matches the Linux runtime pins."
+    else:
+        errors = [error for path in args.requirements for error in lock_errors(path)]
+        success = "Pinned versions and active dependency closure validated for this platform."
     for error in errors:
         print(error)
     if errors:
         raise SystemExit(1)
-    print("Pinned versions and active dependency closure validated for this platform.")
+    print(success)
 
 
 if __name__ == "__main__":

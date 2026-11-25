@@ -86,6 +86,11 @@ par architecture. Le build vérifie leur SHA-256 avant l'installation
 hors réseau, puis APK vérifie leur signature Alpine. Pour mettre un
 paquet à jour, remplacer son nom d'archive et son empreinte dans les
 fichiers concernés, puis relancer le contrôle d'image.
-La reproduction par digest suppose aussi les mêmes sources, la même
-version de BuildKit et les mêmes paquets Python amont.
+Le conteneur installe les wheels de `docker/python-runtime.txt` avec
+`pip --require-hashes`. La CI compare ce verrou à la liste des versions
+Linux de `requirements.txt`. Pour une mise à jour, contrôler le SHA-256
+des wheels PyPI pour chaque architecture du conteneur, actualiser le
+verrou et relancer le contrôle d'image. La reproduction par digest
+suppose les mêmes sources et la même version de BuildKit.
+[Mode de vérification des empreintes pip](https://pip.pypa.io/en/stable/topics/secure-installs/).
 [Construction reproductible avec BuildKit](https://docs.docker.com/build/ci/github-actions/reproducible-builds/).

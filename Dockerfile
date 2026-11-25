@@ -12,10 +12,10 @@ RUN --network=none NO_EXT=1 SOURCE_DATE_EPOCH=1760000000 PYTHONHASHSEED=0 TZ=UTC
     pip wheel --no-cache-dir --no-index --no-deps --no-build-isolation --wheel-dir=/wheels /sources/pymongo-4.19.0.tar.gz
 
 FROM python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS python-runtime
-COPY requirements.txt /tmp/requirements.txt
+COPY docker/python-runtime.txt /tmp/python-runtime.txt
 COPY docker/mongodb/runtime.txt /tmp/mongodb-runtime.txt
 COPY --from=mongodb-driver /wheels /tmp/mongodb-wheels
-RUN pip install --no-cache-dir --no-compile --only-binary=:all: -r /tmp/requirements.txt && \
+RUN pip install --no-cache-dir --no-compile --only-binary=:all: --require-hashes -r /tmp/python-runtime.txt && \
     pip install --no-cache-dir --no-compile --no-index --find-links=/tmp/mongodb-wheels --only-binary=:all: --require-hashes -r /tmp/mongodb-runtime.txt && \
     pip check && \
     rm -rf /tmp/mongodb-wheels /usr/local/lib/python3.13/sqlite3 /usr/local/lib/python3.13/lib-dynload/_sqlite3*.so
