@@ -100,7 +100,8 @@ def test_volume_cleanup_refuses_foreign_ownership(monkeypatch, owned):
     assert any(args[2] == "rm" for args in calls) is (owned is True)
 
 
-def test_canonical_image_build_uses_the_requested_git_tree(monkeypatch, tmp_path):
+@pytest.mark.parametrize("store", ["classic", "oci", "mismatch"])
+def test_canonical_image_build_uses_the_requested_git_tree(monkeypatch, tmp_path, store):
     def git(*args):
         return subprocess.check_output(["git", "-C", str(tmp_path), *args])
 
@@ -124,29 +125,52 @@ def test_canonical_image_build_uses_the_requested_git_tree(monkeypatch, tmp_path
     iid = tmp_path / "build.iid"
     config = "sha256:" + "a" * 64
     manifest = "sha256:" + "b" * 64
-    observed = []
+    observed = {}
+    loaded = {"classic": config, "oci": manifest, "mismatch": "sha256:" + "c" * 64}[store]
 
-    def docker(args, *, log, stdin):
-        assert args[:6] == ["docker", "buildx", "build", "--builder", "pinned", "--no-cache"]
-        assert args[-1] == "-"
-        assert log.name == "docker-build.log"
-        assert args[args.index("--iidfile") + 1] == str(iid)
-        source = stdin.read()
-        observed.append("sha256:" + hashlib.sha256(source).hexdigest())
-        with tarfile.open(fileobj=io.BytesIO(source)) as archive:
-            assert archive.getnames() == ["Dockerfile"]
-            assert archive.extractfile("Dockerfile").read() == b"FROM scratch\n"
-        metadata = Path(args[args.index("--metadata-file") + 1])
-        metadata.write_text(
-            json.dumps({"containerimage.config.digest": config, "containerimage.digest": manifest}),
-            encoding="utf-8",
-        )
+    def docker(args, *, log=None, stdin=None):
+        if args[:3] == ["docker", "buildx", "build"]:
+            assert args[3:6] == ["--builder", "pinned", "--no-cache"]
+            assert args[-1] == "-"
+            assert log.name == "docker-build.log"
+            assert args[args.index("--iidfile") + 1] == str(iid)
+            source = stdin.read()
+            observed["source_digest"] = "sha256:" + hashlib.sha256(source).hexdigest()
+            with tarfile.open(fileobj=io.BytesIO(source)) as archive:
+                assert archive.getnames() == ["Dockerfile"]
+                assert archive.extractfile("Dockerfile").read() == b"FROM scratch\n"
+            exporter = args[args.index("--output") + 1]
+            observed["archive"] = Path(exporter.partition(",dest=")[2])
+            iid.write_text(config, encoding="utf-8")
+            metadata = Path(args[args.index("--metadata-file") + 1])
+            metadata.write_text(json.dumps({"containerimage.digest": manifest}), encoding="utf-8")
+        elif args[:3] == ["docker", "image", "load"]:
+            assert args[-1] == str(observed["archive"])
+            assert log.name == "docker-load.log"
+            observed["loaded"] = True
+        else:
+            assert observed["loaded"]
+            assert args == ["docker", "image", "inspect", "example:ci"]
+            return json.dumps([{"Id": loaded}])
+
+    def inspect(path, identity):
+        assert "loaded" not in observed
+        assert path == observed["archive"]
+        assert identity == manifest
+        return {"archive_config_digest": config, "archive_oci_manifest_digest": manifest}
 
     monkeypatch.setattr(check_image, "command", docker)
-    result = check_image.build_image(tmp_path, tmp_path, "example:ci", iid, "pinned", commit)
+    monkeypatch.setattr(check_image.image_archive, "inspect_image_archive", inspect)
+    args = tmp_path, tmp_path, "example:ci", iid, "pinned", commit
+    if store == "mismatch":
+        with pytest.raises(RuntimeError, match="Loaded image identity differs"):
+            check_image.build_image(*args)
+        return
+    identity, result = check_image.build_image(*args)
+    assert identity == loaded
     assert result == {
         "source_commit": commit,
-        "source_tar_digest": observed[0],
+        "source_tar_digest": observed["source_digest"],
         "config_digest": config,
         "manifest_digest": manifest,
     }

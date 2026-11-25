@@ -112,65 +112,78 @@ def build_image(root, reports, image, iidfile, builder, source_commit):
         "SOURCE_DATE_EPOCH=1760000000",
         "--provenance=false",
         "--sbom=false",
-        "--output",
-        "type=docker,oci-mediatypes=true,rewrite-timestamp=true",
         "--iidfile",
         str(iidfile),
         "--tag",
         image,
     ]
     log = reports / "docker-build.log"
+    exporter = "type=docker,oci-mediatypes=true,rewrite-timestamp=true"
     if builder is None:
-        command(["docker", "build", *options, str(root)], log=log)
-        return None
+        command(["docker", "build", *options, "--output", exporter, str(root)], log=log)
+        return iidfile.read_text(encoding="utf-8").strip(), None
 
-    metadata_file = reports / "build-metadata.json"
-    with tempfile.TemporaryFile() as source:
-        archive = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(root),
-                "-c",
-                "core.autocrlf=false",
-                "-c",
-                "core.eol=lf",
-                "archive",
-                "--format=tar",
-                source_commit,
-            ],
-            stdout=source,
-            stderr=subprocess.PIPE,
-            timeout=60,
-        )
-        if archive.returncode:
-            raise RuntimeError("Could not archive the requested Git commit for Docker")
-        source.seek(0)
-        source_digest = "sha256:" + hashlib.file_digest(source, "sha256").hexdigest()
-        source.seek(0)
+    metadata = reports / "build-metadata.json"
+    with tempfile.TemporaryDirectory(prefix="cinevault-export-") as directory:
+        archive = Path(directory) / "image.tar"
+        with tempfile.TemporaryFile() as source:
+            git_archive = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "core.autocrlf=false",
+                    "-c",
+                    "core.eol=lf",
+                    "archive",
+                    "--format=tar",
+                    source_commit,
+                ],
+                stdout=source,
+                stderr=subprocess.PIPE,
+                timeout=60,
+            )
+            if git_archive.returncode:
+                raise RuntimeError("Could not archive the requested Git commit for Docker")
+            source.seek(0)
+            source_digest = "sha256:" + hashlib.file_digest(source, "sha256").hexdigest()
+            source.seek(0)
+            command(
+                [
+                    "docker",
+                    "buildx",
+                    "build",
+                    "--builder",
+                    builder,
+                    "--no-cache",
+                    "--metadata-file",
+                    str(metadata),
+                    *options,
+                    "--output",
+                    f"{exporter},dest={archive}",
+                    "-",
+                ],
+                log=log,
+                stdin=source,
+            )
+
+        manifest = json.loads(metadata.read_text(encoding="utf-8"))["containerimage.digest"]
+        exported = image_archive.inspect_image_archive(archive, manifest)
+        config = exported["archive_config_digest"]
+        if exported["archive_oci_manifest_digest"] != manifest:
+            raise ValueError("BuildKit did not export the expected single OCI image")
+        if iidfile.read_text(encoding="utf-8").strip() not in (config, manifest):
+            raise RuntimeError("Build receipt differs from the BuildKit export")
         command(
-            [
-                "docker",
-                "buildx",
-                "build",
-                "--builder",
-                builder,
-                "--no-cache",
-                "--metadata-file",
-                str(metadata_file),
-                *options,
-                "-",
-            ],
-            log=log,
-            stdin=source,
+            ["docker", "image", "load", "--input", str(archive)],
+            log=reports / "docker-load.log",
         )
+        identity = json.loads(command(["docker", "image", "inspect", image]))[0]["Id"]
+        if identity not in (config, manifest):
+            raise RuntimeError("Loaded image identity differs from the BuildKit export")
 
-    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-    config = metadata["containerimage.config.digest"]
-    manifest = metadata["containerimage.digest"]
-    if not image_archive.is_digest(config) or not image_archive.is_digest(manifest):
-        raise ValueError("BuildKit did not identify the image config and manifest")
-    return {
+    return identity, {
         "source_commit": source_commit,
         "source_tar_digest": source_digest,
         "config_digest": config,
@@ -304,14 +317,13 @@ def main():
     created = False
     try:
         iidfile = reports / "build.iid"
-        build = build_image(root, reports, args.image, iidfile, args.builder, args.source_commit)
+        identity, build = build_image(
+            root, reports, args.image, iidfile, args.builder, args.source_commit
+        )
         if build is not None:
             receipt["build_provenance"] = build
-        identity = iidfile.read_text(encoding="utf-8").strip()
-        if not re.fullmatch(r"sha256:[a-f0-9]{64}", identity):
+        if not image_archive.is_digest(identity):
             raise RuntimeError("Build did not produce a valid immutable image identity")
-        if build is not None and identity not in (build["config_digest"], build["manifest_digest"]):
-            raise RuntimeError("Loaded image identity differs from the BuildKit export")
         info = json.loads(command(["docker", "image", "inspect", identity]))[0]
         if info["Id"] != identity:
             raise RuntimeError("Inspected image differs from the build receipt")
