@@ -75,3 +75,13 @@ l'inventaire et le scan dans `image-audit`, même si Grype bloque l'image.
 Le script de publication relit les deux rapports et compare leurs
 empreintes au reçu du job.
 [Formats et cibles Grype](https://oss.anchore.com/docs/guides/vulnerability/scan-targets/).
+
+Le contrôle CI construit pour Linux amd64 avec BuildKit et fixe
+`SOURCE_DATE_EPOCH=1760000000`. L'exporteur normalise les dates des
+couches. L'installation Python omet les fichiers `.pyc` et l'installation
+APK conserve sa base de paquets sans son journal horodaté. Le compte de
+service reste verrouillé avec une date fixe dans `/etc/shadow`.
+La reproduction par digest suppose les mêmes sources, la même version de
+BuildKit et les mêmes paquets amont. Les dépôts APK peuvent évoluer entre
+deux dates de construction.
+[Construction reproductible avec BuildKit](https://docs.docker.com/build/ci/github-actions/reproducible-builds/).

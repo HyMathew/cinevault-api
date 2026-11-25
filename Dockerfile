@@ -15,19 +15,23 @@ FROM python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338eb
 COPY requirements.txt /tmp/requirements.txt
 COPY docker/mongodb/runtime.txt /tmp/mongodb-runtime.txt
 COPY --from=mongodb-driver /wheels /tmp/mongodb-wheels
-RUN pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements.txt && \
-    pip install --no-cache-dir --no-index --find-links=/tmp/mongodb-wheels --only-binary=:all: --require-hashes -r /tmp/mongodb-runtime.txt && \
+RUN pip install --no-cache-dir --no-compile --only-binary=:all: -r /tmp/requirements.txt && \
+    pip install --no-cache-dir --no-compile --no-index --find-links=/tmp/mongodb-wheels --only-binary=:all: --require-hashes -r /tmp/mongodb-runtime.txt && \
     pip check && \
     rm -rf /tmp/mongodb-wheels /usr/local/lib/python3.13/sqlite3 /usr/local/lib/python3.13/lib-dynload/_sqlite3*.so
 
 FROM alpine:3.24@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71d8cd630a
 ENV PATH=/usr/local/bin:$PATH LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-RUN apk add --no-cache --virtual .cinevault-runtime ca-certificates \
+# The runtime retains APK's installed database and a locked service account.
+RUN apk add --no-cache ca-certificates \
     libcrypto3=3.5.9-r1 libssl3=3.5.9-r1 \
     so:libbz2.so.1 so:libffi.so.8 so:libgdbm.so.6 \
     so:libgdbm_compat.so.4 so:liblzma.so.5 so:libncursesw.so.6 so:libpanelw.so.6 \
     so:libreadline.so.8 so:libuuid.so.1 zlib=1.4-r0 && \
     addgroup -S -g 10001 cinevault && adduser -S -D -u 10001 -G cinevault cinevault && \
+    sed -i '/^cinevault:!:/s/^cinevault:!:[0-9][0-9]*:/cinevault:!:20370:/' /etc/shadow && \
+    grep -q '^cinevault:!:20370:' /etc/shadow && \
+    rm -f /var/log/apk.log && \
     mkdir /data && chown 10001:10001 /data
 COPY --from=python-runtime /usr/local /usr/local
 WORKDIR /srv/cinevault
