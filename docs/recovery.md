@@ -4,9 +4,9 @@ La primitive `V2Store.restore` restaure exactement un instantané validé vers u
 
 La reprise opérationnelle s'exécute en maintenance, sans nouvelle route HTTP. L'opérateur arrête les écritures et conserve l'ancien volume. Après contrôle SHA-256 fourni depuis une source fiable et validation complète de l'instantané, la commande crée un fichier JSON absent ou publie dans une base MongoDB distincte, vide et préprovisionnée. L'arrêt des écrivains et le choix de l'instantané relèvent de l'exploitant.
 
-Politique retenue : conserver les entités métier et leurs références ; supprimer les sessions et compteurs anti-abus historiques ; désactiver tous les comptes restaurés et remplacer leurs hachages par des mots de passe aléatoires inconnus et immédiatement jetés. Ainsi, une simple réactivation web ne rétablit pas un ancien mot de passe. Un nouvel administrateur de reprise reçoit un identifiant distinct et un mot de passe saisi dans le terminal, sans valeur par défaut ni argument de ligne de commande. Aucun jeton émis.
+La reprise conserve les entités métier et leurs références et supprime les sessions et compteurs anti-abus historiques. Par défaut, elle désactive tous les comptes restaurés et remplace leurs hachages par des mots de passe aléatoires immédiatement jetés. Une simple réactivation web ne rétablit donc aucun ancien mot de passe. Un nouvel administrateur de reprise reçoit un identifiant distinct et un mot de passe saisi dans le terminal, sans valeur par défaut ni argument de ligne de commande. La commande n'émet aucun jeton.
 
-Les attentes de réservation deviennent expirées si leur date est passée, sinon annulées, car leurs comptes sont en quarantaine. Les prêts actifs et leurs dates restent conservés pour rapprochement physique ; aucune fausse restitution. Audit minimal des clôtures et de la reprise par le nouvel administrateur, sans contenu d'archive, mot de passe ou nom de fichier. Les reçus d'opérations restent historiques et bornés ; ils ne constituent pas une garantie pour les modifications perdues depuis la sauvegarde.
+Toutes les attentes de réservation deviennent expirées si leur date est passée, sinon annulées, y compris pour un administrateur conservé. Les prêts actifs et leurs dates restent conservés pour rapprochement physique. L'audit attribue les clôtures manuelles et la reprise à l'administrateur de reprise, sans contenu d'archive, mot de passe ou nom de fichier. Les reçus d'opérations restent historiques et bornés. Ils ne garantissent pas la conservation des modifications effectuées après la sauvegarde.
 
 L'outil local de réinitialisation de mot de passe permet ensuite le retour individuel d'un compte vérifié, sans changer son rôle ; réactivation explicite et non automatique. L'opérateur indique l'identité d'un administrateur actif pour l'audit, sous la confiance déjà accordée à l'accès au fichier. Ce n'est pas une preuve d'authentification applicative d'un opérateur sans accès au fichier.
 
@@ -24,7 +24,7 @@ python -m app.recovery restore --snapshot /sauvegardes/catalogue.json --target /
 
 La commande demande l'identifiant et le nom affiché du **nouvel** administrateur, puis un mot de passe de 12 à 256 caractères et sa confirmation, avec saisie masquée. Aucun mot de passe en argument, variable de configuration ou valeur par défaut. Les entrées par pipe et terminaux sans saisie interactive sont refusés. Le résultat JSON ne contient que référence d'opération, empreintes source/candidat et nombres de comptes/sessions/attentes traités ; son empreinte cible décrit l'état initial de reprise, avant toute nouvelle connexion ou écriture.
 
-Le nouvel administrateur peut s'authentifier après démarrage de l'API sur le nouveau chemin. Un ancien utilisateur ne revient qu'après vérification par l'opérateur et changement de mot de passe :
+L'administrateur de reprise peut s'authentifier après démarrage de l'API sur le nouveau chemin. Un compte en quarantaine revient après vérification par l'opérateur et changement de mot de passe :
 
 ```console
 python -m app.recovery reset-password --store /data/recovered.json --operator <administrateur-actif> --username <compte-verifie> --enable
@@ -47,14 +47,36 @@ Le fichier contient l'URI privée avec accès à un replica set, authentificatio
 
 La création du premier administrateur est refusée dès qu'un compte possède ce rôle, y compris si son compte est désactivé, ou si la limite de 10 000 comptes est atteinte. Le reset exige un administrateur actif. Le nouveau hachage, la révocation des sessions du compte ciblé et l'événement d'audit sont écrits dans une seule transaction. Si la commande signale un résultat incertain, vérifier l'état de la base avant de répéter l'opération.
 
-À 10 000 comptes dans l'instantané, la création d'un candidat est refusée. L'administrateur de reprise doit tenir dans cette limite sur les deux moteurs.
-
 Le 20 novembre 2026, deux vraies commandes interactives ont créé le premier
 administrateur et réinitialisé un mot de passe dans une base MongoDB isolée.
 La campagne a vérifié les refus sans mutation, la révocation des sessions
 ciblées, la réactivation explicite, l'audit dans la même transaction et la
 saisie masquée. La restauration JSON a été vérifiée séparément dans la même
 campagne. [Reçu natif P5 et C5](evidence/mongodb-p5-operator-native-20261120.json).
+
+## Reprise à 10 000 comptes
+
+À capacité maximale, le mode par défaut refuse d'ajouter un compte. L'option explicite
+`--retain-verified-admin` conserve un administrateur déjà actif dans l'instantané. Elle est
+disponible sur `app.recovery restore` et `app.recover_mongo apply`, avec les mêmes prérequis
+d'isolement et de vérification de l'empreinte.
+
+Avant l'exécution, l'exploitant doit confirmer par un canal indépendant que le titulaire
+contrôle toujours l'identité historique et reste habilité à l'administration. Saisir son
+identifiant lorsque le terminal le demande. Son UUID, son nom, son rôle, son historique,
+ses références métier et son statut sont conservés. Saisir un nouveau mot de passe et le
+transmettre uniquement au titulaire vérifié par un canal protégé. La commande refuse le
+mot de passe de l'instantané, un compte inexistant ou désactivé et tout rôle autre
+qu'administrateur. Elle révoque toutes les sessions, y compris celles de l'administrateur
+conservé, et met les autres comptes en quarantaine. Le reçu porte
+`"retained_existing_admin": true` avec le nombre de comptes placés en quarantaine.
+Conserver dans le journal d'exploitation privé la référence d'opération, l'identité de
+l'exploitant et la vérification du titulaire. L'audit applicatif associe les clôtures
+à l'UUID conservé et ne prouve pas qui a exécuté la commande locale.
+
+En l'absence d'un titulaire vérifié parmi les administrateurs actifs, maintenir la cible
+isolée et choisir un instantané approuvé qui permet la reprise. Toute reprise conserve les
+références métier. Vérifier le reçu et les accès à la cible avant la remise en service.
 
 ## Reprise d'un instantané MongoDB
 
@@ -67,7 +89,7 @@ python -m app.recover_mongo inspect-source --source-uri-file /run/secrets/recove
 python -m app.recover_mongo apply --source-uri-file /run/secrets/recovery_reader_uri --source-database cinevault_snapshot --target-uri-file /run/secrets/recovery_writer_uri --target-database cinevault_recovered --expected-source-snapshot-sha256 <empreinte-source-verifiee> --isolated-and-writers-stopped
 ```
 
-Comparer l'empreinte native `snapshot_sha256` à la référence de l'instantané approuvé. La commande `apply` demande les coordonnées du nouvel administrateur au terminal et masque la saisie et la confirmation de son mot de passe. Elle applique la politique de quarantaine commune en mémoire, sans produire d'export intermédiaire. La coordination, les comptes, les entités métier, les clôtures et l'audit sont publiés dans la même transaction. La révision cible est celle de la source plus un. Une révision source au maximum BSON Int64 entraîne un refus.
+Comparer l'empreinte native `snapshot_sha256` à la référence de l'instantané approuvé. Par défaut, la commande `apply` demande les coordonnées d'un nouvel administrateur au terminal. Dans les deux modes, elle masque la saisie et la confirmation du mot de passe. Elle applique la politique de quarantaine commune en mémoire, sans produire d'export intermédiaire. La coordination, les comptes, les entités métier, les clôtures et l'audit sont publiés dans la même transaction. La révision cible est celle de la source plus un. Une révision source au maximum BSON Int64 entraîne un refus.
 
 En cas de succès, conserver le reçu JSON et son `target_snapshot_sha256`. Celui-ci décrit le contenu initial complet du candidat avant toute connexion de l'application. Une nouvelle exécution avec une cible déjà remplie est refusée. Les tentatives transactionnelles internes utilisent le même candidat.
 

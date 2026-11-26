@@ -3,6 +3,7 @@
 import copy
 import json
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from bson import BSON, Int64
@@ -183,6 +184,65 @@ def test_account_capacity_refuses_before_generating_new_credentials(databases, m
         apply(source, target, expected)
     assert {step[0] for step in target.trace}.isdisjoint(WRITES)
     assert target.data == encode_snapshot(empty_document())
+
+
+def test_retained_admin_preserves_capacity_and_identity_in_native_publication(
+    databases, monkeypatch
+):
+    source, target = databases
+    document, _ = read_verified_snapshot(source)
+    admin, member = document["users"]
+    document["users"].extend(
+        {
+            **member,
+            "id": str(uuid.UUID(int=1000 + index)),
+            "username": f"synthetic-{index}",
+        }
+        for index in range(ACCOUNT_CAPACITY - len(document["users"]))
+    )
+    source.data = encode_snapshot(document)
+    before = BSON.encode(source.data)
+    expected = recover_mongo.inspect_source(source)["snapshot_sha256"]
+    actual_hash = hasher.hash
+    placeholder_hash = actual_hash("unused synthetic fixture password")
+    discarded_passwords = set()
+
+    def hash_for_test(password):
+        # Exercise the true storage boundary without running 9,999 expensive Argon2 calls.
+        if password == PASSWORD:
+            return actual_hash(password)
+        assert password not in discarded_passwords
+        discarded_passwords.add(password)
+        return placeholder_hash
+
+    monkeypatch.setattr(
+        "app.recovery.hasher", SimpleNamespace(hash=hash_for_test, verify=hasher.verify)
+    )
+    receipt = recover_mongo.apply(
+        source,
+        target,
+        admin["username"],
+        None,
+        PASSWORD,
+        expected_source_snapshot_sha256=expected,
+        retain_admin=True,
+        timestamp=86420,
+    )
+    restored, observed = read_verified_snapshot(target)
+    assert receipt["status"] == "applied" and receipt["retained_existing_admin"] is True
+    assert receipt["target_snapshot_sha256"] == observed["snapshot_sha256"]
+    assert receipt["disabled_users"] == len(discarded_passwords) == ACCOUNT_CAPACITY - 1
+    assert len(restored["users"]) == ACCOUNT_CAPACITY
+    assert {step[0] for step in source.trace}.isdisjoint(WRITES)
+    assert BSON.encode(source.data) == before
+    (recovered_admin,) = (user for user in restored["users"] if user["enabled"])
+    assert {**recovered_admin, "password_hash": admin["password_hash"]} == admin
+    assert hasher.verify(recovered_admin["password_hash"], PASSWORD)
+    assert set(user["id"] for user in restored["users"]) == set(
+        user["id"] for user in document["users"]
+    )
+    assert restored["sessions"] == restored["auth_attempts"] == []
+    assert restored["audit_events"][-1]["actor_id"] == admin["id"]
 
 
 def test_uncertain_commit_has_read_only_reconciliation(databases, monkeypatch):

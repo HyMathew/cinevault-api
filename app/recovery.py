@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 import portalocker
+from argon2.exceptions import HashingError, InvalidHashError, VerificationError, VerifyMismatchError
 
 from .account_cli import (
     OperatorArgumentParser,
@@ -48,32 +49,53 @@ def verified_snapshot(path, expected_sha256):
     return decode_document(data)
 
 
-def quarantine_accounts(document, username, display_name, password, *, timestamp=None):
+def quarantine_accounts(
+    document, username, display_name, password, *, retain_admin=False, timestamp=None
+):
     """Transform a caller-owned, validated v2 document before publication."""
     timestamp = int(time.time()) if timestamp is None else timestamp
     check_clock(document, timestamp)
     username = normalize_username(username)
-    if (
-        not username
-        or not valid_display(display_name)
-        or not valid_password(password)
-        or any(u["username"] == username for u in document["users"])
-    ):
+    if not username or not valid_password(password) or type(retain_admin) is not bool:
         raise ValueError("Invalid recovery administrator")
-    if len(document["users"]) >= ACCOUNT_CAPACITY:
-        raise ValueError("Account storage limit exceeded")
-    admin = make_user(username, display_name, password, "admin", timestamp)
+    existing = next((u for u in document["users"] if u["username"] == username), None)
+    if retain_admin:
+        if display_name is not None or existing is None:
+            raise ValueError("Invalid retained recovery administrator")
+        if existing["role"] != "admin" or not existing["enabled"]:
+            raise ValueError("Retained recovery administrator must be active")
+        try:
+            hasher.verify(existing["password_hash"], password)
+        except VerifyMismatchError:
+            pass
+        except (VerificationError, InvalidHashError):
+            raise ValueError("Cannot verify archived administrator credential") from None
+        else:
+            raise ValueError("Retained recovery administrator requires a different password")
+        admin = existing
+        admin["password_hash"] = hasher.hash(password)
+    else:
+        if not valid_display(display_name) or existing is not None:
+            raise ValueError("Invalid recovery administrator")
+        if len(document["users"]) >= ACCOUNT_CAPACITY:
+            raise ValueError("Account storage limit exceeded")
+        admin = make_user(username, display_name, password, "admin", timestamp)
     report = {
         "operation_id": str(uuid.uuid4()),
-        "disabled_users": len(document["users"]),
+        "disabled_users": len(document["users"]) - int(retain_admin),
         "revoked_sessions": len(document["sessions"]),
         "closed_reservations": 0,
     }
+    if retain_admin:
+        report["retained_existing_admin"] = True
     for user in document["users"]:
+        if user is existing:
+            continue
         user["enabled"] = False
         # Discard each independent random password; re-enabling cannot revive an archived password.
         user["password_hash"] = hasher.hash(secrets.token_urlsafe(48))
-    document["users"].append(admin)
+    if not retain_admin:
+        document["users"].append(admin)
     document["sessions"] = []
     document["auth_attempts"] = []
     for reservation in document["reservations"]:
@@ -98,12 +120,24 @@ def quarantine_accounts(document, username, display_name, password, *, timestamp
     return report
 
 
-def recover(snapshot, target, expected_sha256, username, display_name, password, *, timestamp=None):
+def recover(
+    snapshot,
+    target,
+    expected_sha256,
+    username,
+    display_name,
+    password,
+    *,
+    retain_admin=False,
+    timestamp=None,
+):
     target = Path(target)
     if target.exists():
         raise FileExistsError("Recovery target already exists")
     document = verified_snapshot(snapshot, expected_sha256)
-    report = quarantine_accounts(document, username, display_name, password, timestamp=timestamp)
+    report = quarantine_accounts(
+        document, username, display_name, password, retain_admin=retain_admin, timestamp=timestamp
+    )
     encoded = _encode(document)
     with portalocker.Lock(str(target) + ".lock", mode="a", timeout=10):
         _write_new(target, encoded)
@@ -134,6 +168,12 @@ def read_password():
     return password
 
 
+def read_recovery_admin(prompt, *, retain_admin):
+    if retain_admin:
+        return prompt("Existing administrator username (verified owner only): "), None
+    return prompt("New recovery administrator username: "), prompt("Display name: ")
+
+
 def main():
     parser = OperatorArgumentParser(
         description="Offline recovery; keep API stopped and preserve the old volume."
@@ -143,6 +183,7 @@ def main():
     restore.add_argument("--snapshot", required=True)
     restore.add_argument("--target", required=True)
     restore.add_argument("--sha256", required=True)
+    restore.add_argument("--retain-verified-admin", action="store_true")
     reset = commands.add_parser("reset-password")
     add_store_arguments(reset)
     reset.add_argument("--operator", required=True)
@@ -157,10 +198,17 @@ def main():
             if Path(args.target).exists():
                 raise FileExistsError()
             verified_snapshot(args.snapshot, args.sha256)
-            username = input("New recovery administrator username: ")
-            display_name = input("Display name: ")
+            username, display_name = read_recovery_admin(
+                input, retain_admin=args.retain_verified_admin
+            )
             report = recover(
-                args.snapshot, args.target, args.sha256, username, display_name, read_password()
+                args.snapshot,
+                args.target,
+                args.sha256,
+                username,
+                display_name,
+                read_password(),
+                retain_admin=args.retain_verified_admin,
             )
             print(json.dumps(report, sort_keys=True))
         else:
@@ -180,7 +228,7 @@ def main():
         parser.exit(1, "Recovery operation cancelled.\n")
     except CommitOutcomeUnknown:
         parser.exit(1, "Password reset outcome is uncertain. Verify before retrying.\n")
-    except (ValueError, OSError, RuntimeError, portalocker.exceptions.LockException):
+    except (ValueError, OSError, RuntimeError, HashingError, portalocker.exceptions.LockException):
         parser.exit(
             1, "Recovery operation failed. Inspect the storage and clock before retrying.\n"
         )

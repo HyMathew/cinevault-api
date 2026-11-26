@@ -153,6 +153,58 @@ def test_recovery_never_clobbers_and_rejects_bad_archive_or_clock(enterprise, tm
     assert target.read_bytes() == b"preserve me"
 
 
+def test_retained_administrator_keeps_identity_and_must_use_new_credentials(enterprise, tmp_path):
+    from app.recovery import recover
+
+    client, path, archive, _, _ = snapshot(enterprise, tmp_path)
+    _, old_admin_session = account(client, "verifiedadmin", "admin", path)
+    inactive, _ = account(client, "inactiveadmin", "admin", path)
+    store = V2Store(path)
+    store.transact(
+        lambda doc: next(u for u in doc["users"] if u["id"] == inactive["id"]).update(enabled=False)
+    )
+    source = archive.with_name("retained-source.json")
+    digest = store.snapshot(source)
+    source_bytes = source.read_bytes()
+    original = V2Store(path).read()
+    target = tmp_path / "retained.json"
+    new_password = "synthetic retained admin secret"
+    for username, display_name, password in (
+        ("unknown-admin", None, new_password),
+        ("restoremanager", None, new_password),
+        ("inactiveadmin", None, new_password),
+        ("verifiedadmin", "Reassigned name", new_password),
+        ("verifiedadmin", None, "test passphrase 123"),
+    ):
+        with pytest.raises(ValueError):
+            recover(source, target, digest, username, display_name, password, retain_admin=True)
+        assert not target.exists()
+
+    report = recover(source, target, digest, "verifiedadmin", None, new_password, retain_admin=True)
+    assert report["retained_existing_admin"] is True
+    assert report["disabled_users"] == 4 and report["revoked_sessions"] == 5
+    assert source.read_bytes() == source_bytes == path.read_bytes()
+    restored = V2Store(target).read()
+    assert len(restored["users"]) == len(original["users"])
+    (before,) = (user for user in original["users"] if user["username"] == "verifiedadmin")
+    (after,) = (user for user in restored["users"] if user["enabled"])
+    assert {**after, "password_hash": before["password_hash"]} == before
+    assert after["password_hash"] != before["password_hash"]
+    assert restored["audit_events"][-1]["actor_id"] == before["id"]
+    assert restored["sessions"] == restored["auth_attempts"] == []
+    for key in ("movies", "copies", "collections", "loans", "idempotency_records"):
+        assert restored[key] == original[key]
+    api = app_for(target)
+    assert api.get("/api/v1/me", headers=old_admin_session).status_code == 401
+    for password, status in (("test passphrase 123", 401), (new_password, 200)):
+        assert (
+            api.post(
+                "/api/v1/auth/login", json={"username": "verifiedadmin", "password": password}
+            ).status_code
+            == status
+        )
+
+
 def test_reset_of_verified_account_requires_active_admin_and_does_not_change_role(
     enterprise, tmp_path
 ):

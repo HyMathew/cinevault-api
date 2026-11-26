@@ -24,7 +24,7 @@ from .migrate_backends import (
 from .persistence.errors import CommitOutcomeUnknown, TransactionUnavailable
 from .persistence.factory import _connection_secret
 from .persistence.mongo_model import INT64_MAX
-from .recovery import quarantine_accounts, read_password
+from .recovery import quarantine_accounts, read_password, read_recovery_admin
 
 
 class RecoveryCommitUnknown(CommitOutcomeUnknown):
@@ -56,6 +56,7 @@ def apply(
     password,
     *,
     expected_source_snapshot_sha256,
+    retain_admin=False,
     timestamp=None,
 ):
     """Prepare a quarantined copy in memory and publish it using one transaction."""
@@ -73,7 +74,12 @@ def apply(
         raise MigrationError("MongoDB recovery requires an empty provisioned target")
     try:
         report = quarantine_accounts(
-            document, username, display_name, password, timestamp=timestamp
+            document,
+            username,
+            display_name,
+            password,
+            retain_admin=retain_admin,
+            timestamp=timestamp,
         )
     except ValueError as exc:
         raise MigrationError(str(exc)) from None
@@ -128,6 +134,7 @@ def _parser():
             command.add_argument("--target-database", required=True)
         if name == "apply":
             command.add_argument("--expected-source-snapshot-sha256", required=True)
+            command.add_argument("--retain-verified-admin", action="store_true")
             command.add_argument(
                 "--isolated-and-writers-stopped", action="store_true", required=True
             )
@@ -185,13 +192,17 @@ def _execute(args):
         source_uri, target_uri = _uri(args.source_uri_file), _uri(args.target_uri_file)
         if _principal(source_uri) == _principal(target_uri):
             raise MigrationError("MongoDB recovery requires distinct authenticated principals")
+        username, display_name = read_recovery_admin(
+            _prompt, retain_admin=args.retain_verified_admin
+        )
         return apply(
             _database(stack, args.source_database, source_uri),
             _database(stack, args.target_database, target_uri),
-            _prompt("New recovery administrator username: "),
-            _prompt("Display name: "),
+            username,
+            display_name,
             read_password(),
             expected_source_snapshot_sha256=args.expected_source_snapshot_sha256,
+            retain_admin=args.retain_verified_admin,
         )
 
 
