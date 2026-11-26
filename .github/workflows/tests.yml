@@ -283,7 +283,25 @@ jobs:
             --source-digest "$GITHUB_SHA" \
             --source-ref "$GITHUB_REF" \
             --deny-self-hosted-runners \
-            --format json > image-attestation-verification.json
+            --format json > verified-attestations.json
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          repository = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+          invocation = f"{repository}/actions/runs/{os.environ['GITHUB_RUN_ID']}/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+          verified = json.loads(Path("verified-attestations.json").read_bytes())
+          current = [
+              row for row in verified
+              if row["verificationResult"]["signature"]["certificate"].get("runInvocationURI") == invocation
+          ]
+          if not current:
+              raise SystemExit("No verified image attestation from the current workflow attempt.")
+          Path("image-attestation-verification.json").write_text(
+              json.dumps(current, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
       - name: Keep the verified image provenance
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
