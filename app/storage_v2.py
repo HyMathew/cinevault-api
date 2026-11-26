@@ -208,7 +208,8 @@ class V2Store:
 
     def read(self):
         with portalocker.Lock(self.lock_path, mode="a", timeout=10):
-            return decode_document(self.path.read_bytes())
+            snapshot = self.path.read_bytes()
+        return decode_document(snapshot)
 
     def transact(self, mutation):
         with portalocker.Lock(self.lock_path, mode="a", timeout=10):

@@ -3,9 +3,12 @@ import json
 import subprocess
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
+from app import storage_v2
 from app.storage_v2 import V2Store
 
 
@@ -88,6 +91,36 @@ def test_corrupt_or_unsupported_documents_fail_closed(tmp_path, bad):
     with pytest.raises(ValueError):
         store.transact(lambda doc: None)
     assert store.path.read_bytes() == before
+
+
+def test_reader_validates_captured_bytes_while_writer_commits(tmp_path, monkeypatch):
+    store = V2Store(tmp_path / "data.json")
+    store.initialize()
+    decode = storage_v2.decode_document
+    snapshot_captured = Event()
+    allow_reader_to_continue = Event()
+    movie = _film()
+
+    def pause_first_decode(data):
+        if not snapshot_captured.is_set():
+            snapshot_captured.set()
+            assert allow_reader_to_continue.wait(10)
+        return decode(data)
+
+    monkeypatch.setattr(storage_v2, "decode_document", pause_first_decode)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reader = executor.submit(store.read)
+        try:
+            assert snapshot_captured.wait(5)
+            writer = executor.submit(store.transact, lambda doc: doc["movies"].append(movie))
+            writer.result(timeout=4)
+        finally:
+            allow_reader_to_continue.set()
+        snapshot = reader.result(timeout=5)
+
+    assert snapshot["revision"] == 0 and snapshot["movies"] == []
+    current = store.read()
+    assert current["revision"] == 1 and current["movies"] == [movie]
 
 
 def test_snapshot_and_restore_are_verified_and_never_clobber(tmp_path):
