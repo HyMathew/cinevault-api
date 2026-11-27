@@ -5,6 +5,7 @@ import re
 from .validation import is_unicode
 
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
+USERNAME_PREFIX = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
 HASH = re.compile(r"^[0-9a-f]{64}$")
 ACCOUNT_CAPACITY = 10000
 SESSION_CAPACITY = 10000

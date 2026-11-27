@@ -410,6 +410,7 @@ def application_contract(client, address, password, attempt, *, circulation_corp
         result = contract.exercise_backend(app[name], maintenance_database=database)
         for filename, function, key in (
             ("test_authentication_service.py", "exercise_auth_service", "authentication_service"),
+            ("test_account_services.py", "exercise_native_directory_filters", "account_directory"),
             ("test_catalogue_service.py", "exercise_catalogue_service", "catalogue_service"),
             ("test_copy_service.py", "exercise_copy_service", "copy_service"),
             ("test_personal_service.py", "exercise_personal_service", "personal_service"),

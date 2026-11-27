@@ -138,6 +138,17 @@ class JsonAccounts(_Repository):
         rows = sorted(self._scope.rows("users"), key=lambda row: row["username"])
         return copy.deepcopy(rows[offset : offset + limit])
 
+    def directory_page(self, limit, offset, *, prefix, role, enabled):
+        matches = [
+            row
+            for row in self._scope.rows("users")
+            if row["username"].startswith(prefix)
+            and (not role or row["role"] == role)
+            and (enabled is None or row["enabled"] is enabled)
+        ]
+        matches.sort(key=lambda row: row["username"])
+        return copy.deepcopy(matches[offset : offset + limit]), len(matches)
+
     def has_admin(self) -> bool:
         return any(row["role"] == "admin" for row in self._scope.rows("users"))
 

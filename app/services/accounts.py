@@ -2,7 +2,7 @@
 
 import uuid
 
-from ..auth_storage import ACCOUNT_CAPACITY
+from ..auth_storage import ACCOUNT_CAPACITY, USERNAME_PREFIX
 from ..circulation_model import payload
 from ..personal_model import make_event
 from ..validation import ValidationError
@@ -156,16 +156,37 @@ class AdminAccountService:
                 if (
                     not 1 <= limit <= 100
                     or not 0 <= offset <= 10000
-                    or set(values) - {"limit", "offset"}
+                    or set(values) - {"limit", "offset", "prefix", "role", "enabled"}
                 ):
                     raise ValueError()
             except (ValueError, TypeError):
                 raise ValidationError({"query": "Pagination invalide."}) from None
+            prefix = values.get("prefix", "").strip()
+            role = values.get("role", "")
+            status = values.get("enabled", "")
+            if prefix and (
+                not prefix.isascii() or USERNAME_PREFIX.fullmatch(prefix.lower()) is None
+            ):
+                raise ValidationError({"prefix": "Début d’identifiant invalide."})
+            if role not in ("", "member", "manager", "admin"):
+                raise ValidationError({"role": "Rôle invalide."})
+            if status not in ("", "true", "false"):
+                raise ValidationError({"enabled": "Statut invalide."})
+            if prefix or role or status:
+                accounts, total = work.accounts.directory_page(
+                    limit,
+                    offset,
+                    prefix=prefix.lower(),
+                    role=role,
+                    enabled={"true": True, "false": False}.get(status),
+                )
+            else:
+                accounts, total = work.accounts.page(limit, offset), work.accounts.count()
             return ServiceResult(
                 200,
                 body={
-                    "users": [public_profile(row) for row in work.accounts.page(limit, offset)],
-                    "total": work.accounts.count(),
+                    "users": [public_profile(row) for row in accounts],
+                    "total": total,
                     "limit": limit,
                     "offset": offset,
                 },

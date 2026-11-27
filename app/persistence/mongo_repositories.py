@@ -361,6 +361,26 @@ class MongoAccounts(_Repository):
         with cursor.sort("username", 1).skip(offset).limit(limit):
             return [decode_record("users", record) for record in cursor]
 
+    def directory_page(self, limit, offset, *, prefix, role, enabled):
+        self._scope.check()
+        selector = {}
+        if prefix:
+            selector["username"] = {"$regex": "^" + re.escape(prefix)}
+        if role:
+            selector["role"] = role
+        if enabled is not None:
+            selector["enabled"] = enabled
+        collection = self._scope.collection("users")
+        session = self._scope._session
+        total = collection.count_documents(selector, session=session)
+        with (
+            collection.find(selector, session=session)
+            .sort("username", 1)
+            .skip(offset)
+            .limit(limit) as cursor
+        ):
+            return [decode_record("users", row) for row in cursor], total
+
     def has_admin(self) -> bool:
         return self._scope.find("users", {"role": "admin"}, {"_id": 1}) is not None
 

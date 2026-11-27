@@ -266,6 +266,26 @@
             }
           },
           {
+            "name": "prefix",
+            "in": "query",
+            "description": "Début littéral, insensible à la casse, de l’identifiant.",
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,31})?$"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["", "member", "manager", "admin"]}
+          },
+          {
+            "name": "enabled",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["", "true", "false"]}
+          },
+          {
             "name": "offset",
             "in": "query",
             "schema": {

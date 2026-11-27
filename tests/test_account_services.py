@@ -61,6 +61,53 @@ def backend(tmp_path):
     return JsonPersistence(path), path
 
 
+def exercise_directory_filters(persistence):
+    _, admin = implementation()
+    directory = admin(persistence)
+    unique = uuid.uuid4().hex[:8]
+    prefix = "cine." + unique
+    _, operator, _ = seed_account(persistence, "ops-" + unique, "admin")
+    _, member, _ = seed_account(persistence, "member-" + unique)
+    data = [
+        account(f"{prefix}-{number:03d}", "manager" if number >= 3 else "member")
+        for number in range(112)
+    ]
+    data[65]["enabled"] = False
+    distractor = account(f"cinex{unique}-050", "manager")
+    persistence.run(lambda work: [work.accounts.insert(row) for row in [*data, distractor]])
+
+    filters = [("prefix", prefix.upper()), ("role", "manager"), ("enabled", "true")]
+    assert directory.users(member, filters, timestamp=NOW).status == 403
+    assert directory.users("invalid", filters, timestamp=NOW).status == 401
+    page = directory.users(operator, [*filters, ("limit", "50"), ("offset", "50")], timestamp=NOW)
+    expected = [row["username"] for row in data[3:] if row["enabled"]]
+    assert page.status == 200 and page.body["total"] == len(expected) == 108
+    assert [row["username"] for row in page.body["users"]] == expected[50:100]
+    assert all(
+        set(row) == {"id", "username", "display_name", "role", "enabled"}
+        for row in page.body["users"]
+    )
+    disabled = directory.users(operator, [*filters[:2], ("enabled", "false")], timestamp=NOW)
+    assert disabled.body["total"] == 1 and disabled.body["users"][0]["id"] == data[65]["id"]
+    empty = directory.users(operator, [("prefix", "absent-" + unique)], timestamp=NOW)
+    assert empty.body["total"] == 0 and empty.body["users"] == []
+    for invalid in (("prefix", "cine*"), ("prefix", "K"), ("role", "owner"), ("enabled", "1")):
+        with pytest.raises(ValidationError):
+            directory.users(operator, [invalid], timestamp=NOW)
+    return {"directory_filters": "passed", "filtered_total": len(expected), "second_page": 50}
+
+
+def exercise_native_directory_filters(database):
+    from app.persistence.mongo import MongoPersistence
+
+    return exercise_directory_filters(MongoPersistence(database))
+
+
+def test_directory_filters_on_json(backend):
+    persistence, _ = backend
+    assert exercise_directory_filters(persistence)["directory_filters"] == "passed"
+
+
 def prepared_hash(password):
     assert password == "long passphrase 123"
     return "$argon2id$prepared"
