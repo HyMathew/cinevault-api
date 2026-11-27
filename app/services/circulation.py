@@ -6,6 +6,7 @@ import uuid
 from ..circulation_model import (
     MANAGERS,
     ForbiddenScope,
+    available_after_reservations,
     derived_event_id,
     empty_body,
     list_query,
@@ -405,7 +406,7 @@ class CirculationService:
             "movie_id": movie_id,
             **counts,
             "reserved": reserved,
-            "available": max(0, counts["free"] - reserved),
+            "available": available_after_reservations(counts["free"], reserved),
         }
 
     def availability(self, parameters, *, timestamp):

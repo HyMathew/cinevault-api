@@ -373,6 +373,15 @@
         "security": [],
         "parameters": [
           {
+            "name": "include",
+            "in": "query",
+            "description": "Ajoute les nombres publics d'exemplaires empruntables pour les films de la page.",
+            "schema": {
+              "type": "string",
+              "enum": ["availability"]
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "schema": {
@@ -3248,6 +3257,14 @@
           "offset": {
             "type": "integer",
             "minimum": 0
+          },
+          "availability": {
+            "type": "object",
+            "description": "Présent uniquement avec include=availability. Un entier par identifiant de film de la page, y compris zéro.",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
           "copy_summaries": {
             "type": "object",

@@ -15,6 +15,10 @@ LOAN_STATUSES = ("pending", "active", "returned", "cancelled")
 RESERVATION_STATUSES = ("waiting", "fulfilled", "cancelled", "expired")
 
 
+def available_after_reservations(free: int, reserved: int) -> int:
+    return max(0, free - reserved)
+
+
 @dataclass(frozen=True)
 class RequestBody:
     raw: bytes

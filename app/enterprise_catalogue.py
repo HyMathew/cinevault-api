@@ -58,7 +58,9 @@ def prepare_movie(optional, movie_id=None):
 @bp.get("/movies")
 def list_movies():
     return run_service(
-        lambda: public_catalogue_service().movies(list(request.args.items(multi=True)))
+        lambda: public_catalogue_service().movies(
+            list(request.args.items(multi=True)), timestamp=now()
+        )
     )
 
 

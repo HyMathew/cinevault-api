@@ -10,22 +10,22 @@ class PublicCatalogueService:
     def __init__(self, persistence):
         self._persistence = persistence
 
-    def movies(self, parameters):
-        query = parse_movie_query(parameters)
+    def movies(self, parameters, *, timestamp=None):
+        query, include_availability = parse_movie_query(parameters)
 
         def read(work):
             movies, total = work.catalogue.search_movies(query)
-            summaries = work.catalogue.copy_summaries([movie["id"] for movie in movies])
-            return ServiceResult(
-                200,
-                body={
-                    "movies": [resource(movie) for movie in movies],
-                    "total": total,
-                    "limit": query.limit,
-                    "offset": query.offset,
-                    "copy_summaries": summaries,
-                },
-            )
+            identities = [movie["id"] for movie in movies]
+            body = {
+                "movies": [resource(movie) for movie in movies],
+                "total": total,
+                "limit": query.limit,
+                "offset": query.offset,
+                "copy_summaries": work.catalogue.copy_summaries(identities),
+            }
+            if include_availability:
+                body["availability"] = work.circulation.available_by_movie(identities, timestamp)
+            return ServiceResult(200, body=body)
 
         return self._persistence.query(read)
 

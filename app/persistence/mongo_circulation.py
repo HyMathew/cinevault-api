@@ -4,9 +4,17 @@ from itertools import islice
 
 from bson import Int64
 
-from ..circulation_model import CirculationQuery
+from ..circulation_model import CirculationQuery, available_after_reservations
 from .mongo_model import decode_record, encode_record
 from .mongo_repositories import _identity, _Repository, _timestamp
+
+
+def _waiting_selector(movie, timestamp):
+    return {
+        "movie_id": movie,
+        "status": "waiting",
+        "expires_at": {"$gt": Int64(timestamp)},
+    }
 
 
 class MongoCirculation(_Repository):
@@ -124,11 +132,7 @@ class MongoCirculation(_Repository):
             type(before_sequence) is not int or before_sequence < 1
         ):
             raise ValueError("Invalid queue position")
-        selector = {
-            "movie_id": movie_id,
-            "status": "waiting",
-            "expires_at": {"$gt": Int64(timestamp)},
-        }
+        selector = _waiting_selector(movie_id, timestamp)
         collection = self._scope.collection("reservations")
         total = collection.count_documents(selector, session=self._scope._session)
         head = collection.find_one(selector, sort=[("sequence", 1)], session=self._scope._session)
@@ -169,9 +173,9 @@ class MongoCirculation(_Repository):
             return [decode_record("loans", row) for row in cursor]
 
     @staticmethod
-    def _free_pipeline(movie_id):
+    def _free_pipeline(movie):
         return [
-            {"$match": {"movie_id": movie_id, "condition": {"$ne": "damaged"}}},
+            {"$match": {"movie_id": movie, "condition": {"$ne": "damaged"}}},
             {
                 "$lookup": {
                     "from": "loans",
@@ -218,6 +222,32 @@ class MongoCirculation(_Repository):
             "total": int(total),
             "loaned": int(loaned),
             "free": int(counts[0]["count"]) if counts else 0,
+        }
+
+    def _counts_by_movie(self, collection, pipeline):
+        grouped = [*pipeline, {"$group": {"_id": "$movie_id", "count": {"$sum": 1}}}]
+        with self._scope.collection(collection).aggregate(
+            grouped, session=self._scope._session
+        ) as cursor:
+            return {row["_id"]: int(row["count"]) for row in cursor}
+
+    def available_by_movie(self, movie_ids, timestamp):
+        self._scope.check()
+        _timestamp(timestamp)
+        if type(movie_ids) is not list or len(movie_ids) > 100:
+            raise ValueError("At most 100 film identities are required")
+        for identity in movie_ids:
+            _identity(identity)
+        if not movie_ids:
+            return {}
+        movie_selector = {"$in": movie_ids}
+        free = self._counts_by_movie("copies", self._free_pipeline(movie_selector))
+        waiting = self._counts_by_movie(
+            "reservations", [{"$match": _waiting_selector(movie_selector, timestamp)}]
+        )
+        return {
+            identity: available_after_reservations(free.get(identity, 0), waiting.get(identity, 0))
+            for identity in movie_ids
         }
 
     def _batches(self, selector, batch_size):

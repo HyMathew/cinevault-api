@@ -1,9 +1,18 @@
 """Circulation selections over the owned, fully validated JSON document."""
 
 import copy
+from collections import Counter
 
-from ..circulation_model import CirculationQuery
+from ..circulation_model import CirculationQuery, available_after_reservations
 from .json_repositories import _identity, _Repository, _timestamp
+
+
+def _waiting_at(row, timestamp):
+    return row["status"] == "waiting" and row["expires_at"] > timestamp
+
+
+def _free_copy(row, occupied):
+    return row["condition"] != "damaged" and row["id"] not in occupied
 
 
 class JsonCirculation(_Repository):
@@ -110,9 +119,7 @@ class JsonCirculation(_Repository):
             (
                 row
                 for row in self._scope.rows("reservations")
-                if row["movie_id"] == movie_id
-                and row["status"] == "waiting"
-                and row["expires_at"] > timestamp
+                if row["movie_id"] == movie_id and _waiting_at(row, timestamp)
             ),
             key=lambda row: row["sequence"],
         )
@@ -154,9 +161,7 @@ class JsonCirculation(_Repository):
             [
                 row
                 for row in self._scope.rows("copies")
-                if row["movie_id"] == movie_id
-                and row["condition"] != "damaged"
-                and row["id"] not in occupied
+                if row["movie_id"] == movie_id and _free_copy(row, occupied)
             ]
         )
 
@@ -170,6 +175,36 @@ class JsonCirculation(_Repository):
                 for row in self._scope.rows("loans")
             ),
             "free": len(self.free_copies(movie_id)),
+        }
+
+    def available_by_movie(self, movie_ids, timestamp):
+        self._scope.check()
+        _timestamp(timestamp)
+        if type(movie_ids) is not list or len(movie_ids) > 100:
+            raise ValueError("At most 100 film identities are required")
+        for identity in movie_ids:
+            _identity(identity)
+        identities = set(movie_ids)
+        if not identities:
+            return {}
+        occupied = {
+            row["copy_id"]
+            for row in self._scope.rows("loans")
+            if row["movie_id"] in identities and row["status"] == "active"
+        }
+        free = Counter(
+            row["movie_id"]
+            for row in self._scope.rows("copies")
+            if row["movie_id"] in identities and _free_copy(row, occupied)
+        )
+        waiting = Counter(
+            row["movie_id"]
+            for row in self._scope.rows("reservations")
+            if row["movie_id"] in identities and _waiting_at(row, timestamp)
+        )
+        return {
+            identity: available_after_reservations(free[identity], waiting[identity])
+            for identity in movie_ids
         }
 
     def _batches(self, selector, batch_size, *, sequence_order=True):

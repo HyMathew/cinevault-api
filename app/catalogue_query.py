@@ -73,7 +73,12 @@ def query_values(parameters, allowed):
 
 
 def parse_movie_query(parameters):
-    values = query_values(parameters, {"q", "genre", "year", "support", "sort", "limit", "offset"})
+    values = query_values(
+        parameters, {"q", "genre", "year", "support", "sort", "limit", "offset", "include"}
+    )
+    include_availability = "include" in values
+    if include_availability and values["include"] != "availability":
+        raise ValidationError({"include": "Projection inconnue."})
 
     def integer(name, default, lower, upper):
         try:
@@ -87,7 +92,7 @@ def parse_movie_query(parameters):
     limit, offset = integer("limit", 24, 1, 100), integer("offset", 0, 0, 10000)
     year = integer("year", 1888, 1888, 2100) if "year" in values else None
     try:
-        return MovieQuery(
+        query = MovieQuery(
             query=values.get("q", "").strip().casefold(),
             genre=values.get("genre", "").strip().casefold(),
             year=year,
@@ -98,3 +103,4 @@ def parse_movie_query(parameters):
         )
     except ValueError:
         raise ValidationError({"query": "Filtre ou tri invalide."}) from None
+    return query, include_availability

@@ -6,6 +6,8 @@ import unittest
 import uuid
 from pathlib import Path
 
+from test_circulation_service import NOW, implementation, seed
+
 from app.persistence.json import JsonPersistence
 from app.storage_v2 import V2Store
 from app.validation import ValidationError
@@ -162,6 +164,97 @@ def verify_read_trace(observer):
     return len(observer)
 
 
+def exercise_catalogue_availability(backend, *, observer=None):
+    catalogue = service_type()(backend)
+    circulation = implementation()(backend)
+    movies, copies = fixtures(backend)
+    actors, _ = seed(backend)
+    owner, other, admin = (actors[name][1] for name in ("owner", "other", "admin"))
+    film = movies[0]["id"]
+    target = [("movie_id", film)]
+    title_prefix = movies[0]["title"].split(" ", 1)[0]
+    query = [("q", title_prefix), ("include", "availability")]
+    backend.run(lambda work: work.catalogue.save_copy({**copies[1], "condition": "damaged"}))
+
+    def check(timestamp, expected):
+        before = backend.query(lambda work: work.revision)
+        if observer is not None:
+            observer.clear()
+        observed = catalogue.movies(query, timestamp=timestamp).body["availability"]
+        if observer is not None:
+            assert sum(collection == "reservations" for _, collection in observer) == 1
+            assert all(command in {"find", "aggregate"} for command, _ in observer)
+            page_commands = len(observer)
+            observer.clear()
+            one = catalogue.movies([*query, ("limit", "1")], timestamp=timestamp).body
+            assert len(observer) == page_commands
+            assert one["availability"] == {row["id"]: observed[row["id"]] for row in one["movies"]}
+            observer.clear()
+            empty = catalogue.movies([*query, ("offset", "4")], timestamp=timestamp).body
+            assert empty["availability"] == {}
+            assert not any(c in {"copies", "loans", "reservations"} for _, c in observer)
+        assert observed == {
+            film: expected,
+            movies[1]["id"]: 1,
+            movies[2]["id"]: 0,
+            movies[3]["id"]: 0,
+        }
+        assert (
+            observed[film]
+            == circulation.availability(target, timestamp=timestamp).body["available"]
+        )
+        assert backend.query(lambda work: work.revision) == before
+
+    assert "availability" not in catalogue.movies(query[:1]).body
+    created = circulation.request_loan(owner, {"movie_id": film}, timestamp=NOW)
+    assert created.status == 201
+    check(NOW, 1)  # A pending request does not occupy a copy.
+    active = circulation.approve(
+        admin,
+        created.body["id"],
+        {"copy_id": copies[0]["id"], "due_at": NOW + 60},
+        if_match=created.headers["ETag"],
+        timestamp=NOW,
+    )
+    assert active.status == 200
+    check(NOW, 0)
+    waiting = circulation.create_reservation(other, {"movie_id": film}, timestamp=NOW)
+    assert waiting.status == 201
+    returned = circulation.return_loan(
+        admin, active.body["id"], if_match=active.headers["ETag"], timestamp=NOW + 1
+    )
+    assert returned.status == 200
+    check(waiting.body["expires_at"] - 1, 0)
+    check(waiting.body["expires_at"], 1)
+
+    new_title_prefix = "Page " + uuid.uuid4().hex[:12]
+    full_page = [
+        {**movies[0], "id": str(uuid.uuid4()), "title": f"{new_title_prefix} {number:03d}"}
+        for number in range(100)
+    ]
+    backend.run(lambda work: [work.catalogue.insert_movie(item) for item in full_page])
+    page_query = [("q", new_title_prefix), ("include", "availability")]
+    before = backend.query(lambda work: work.revision)
+    commands_by_page_size = {}
+    for size in (1, 100):
+        if observer is not None:
+            observer.clear()
+        result = catalogue.movies([*page_query, ("limit", str(size))], timestamp=NOW).body
+        assert result["total"] == 100
+        assert result["availability"] == {item["id"]: 0 for item in full_page[:size]}
+        if observer is not None:
+            commands_by_page_size[size] = len(observer)
+            assert sum(collection == "reservations" for _, collection in observer) == 1
+    if observer is not None:
+        assert commands_by_page_size[100] == commands_by_page_size[1]
+    assert backend.query(lambda work: work.revision) == before
+    return {
+        "catalogue_availability": "passed",
+        "fifo_expiry_boundary": True,
+        "native_commands_by_page_size": commands_by_page_size,
+    }
+
+
 class PublicCatalogueServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -172,6 +265,11 @@ class PublicCatalogueServiceTests(unittest.TestCase):
 
     def test_shared_public_contract_on_real_json(self):
         self.assertEqual(exercise_public_queries(self.backend)["public_catalogue"], "passed")
+
+    def test_catalogue_availability_matches_detail_without_mutating_json(self):
+        self.assertEqual(
+            exercise_catalogue_availability(self.backend)["catalogue_availability"], "passed"
+        )
 
     def test_native_trace_rejects_mutations_and_private_collection_reads(self):
         for events in (
@@ -204,6 +302,8 @@ class PublicCatalogueServiceTests(unittest.TestCase):
             [("year", "1" * 5000)],
             [("support", "anything")],
             [("limit", "1"), ("limit", "2")],
+            [("include", "unknown")],
+            [("include", "availability"), ("include", "availability")],
             [("unknown", "x")],
         ):
             with self.subTest(parameters=parameters[0][0]), self.assertRaises(ValidationError):
@@ -242,6 +342,7 @@ def exercise_public_catalogue_service(database, *, observer=None):
     from app.persistence.mongo import MongoPersistence
 
     result = exercise_public_queries(MongoPersistence(database), observer=observer)
+    result.update(exercise_catalogue_availability(MongoPersistence(database), observer=observer))
     raw = database.movies.find_one({"_id": result.pop("_fixture_movie_id")})
     invalid = {**raw, "_id": str(uuid.uuid4())}
     invalid.pop("search_key")

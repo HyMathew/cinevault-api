@@ -112,6 +112,17 @@ def test_filters_pagination_and_public_reads_never_write(enterprise):
     )
     assert response.status_code == 200
     assert response.json["total"] == 2 and response.json["movies"][0]["title"] == "Dune"
+    assert "availability" not in response.json
+    projected = client.get(
+        "/api/v1/movies?genre=science-fiction&support=blu-ray&sort=year&limit=1&offset=1"
+        "&include=availability"
+    )
+    assert projected.status_code == 200
+    assert projected.json == {
+        **response.json,
+        "availability": {response.json["movies"][0]["id"]: 1},
+    }
+    assert client.get("/api/v1/movies?include=").status_code == 422
     assert (
         client.get("/api/v1/movies", query_string={"q": "chalamet", "year": 2007}).json["total"]
         == 1
