@@ -47,6 +47,26 @@ def test_catalogue_permissions_and_atomic_initial_copy(enterprise):
     assert client.get("/api/v1/movies").json["total"] == 1
 
 
+def test_movie_related_projection_has_its_own_representation_version(enterprise):
+    client, path, auth = manager(enterprise)
+    movie = client.post("/api/v1/movies", headers=auth, json=MOVIE).json
+    peer = client.post("/api/v1/movies", headers=auth, json={**MOVIE, "title": "Arrival"}).json
+    endpoint = "/api/v1/movies/" + movie["id"]
+    ordinary = client.get(endpoint)
+    before = path.read_bytes()
+    projected = client.get(endpoint + "?include=related")
+    assert projected.status_code == 200 and projected.json["related"][0]["id"] == peer["id"]
+    assert projected.headers["ETag"] != ordinary.headers["ETag"]
+    assert projected.json["_etag"] == ordinary.headers["ETag"]
+    assert ordinary.json == {
+        key: value for key, value in projected.json.items() if key != "related"
+    }
+    assert client.get(endpoint + "?include=related&include=related").status_code == 422
+    assert client.get(endpoint + "?include=unknown").status_code == 422
+    assert client.get(endpoint + "?include=related&unknown=1").status_code == 422
+    assert path.read_bytes() == before
+
+
 def test_optimistic_concurrency_and_explicit_copy_deletion(enterprise):
     client, path, auth = manager(enterprise)
     movie = client.post("/api/v1/movies", headers=auth, json={**MOVIE, "initial_copy": COPY}).json

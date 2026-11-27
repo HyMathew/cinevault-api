@@ -11,7 +11,7 @@ from pymongo.errors import BulkWriteError, DuplicateKeyError, OperationFailure
 
 from ..auth_storage import SESSION_CAPACITY, USERNAME
 from ..business_storage import BUSINESS_CAPACITIES
-from ..catalogue_query import MovieQuery
+from ..catalogue_query import RELATED_MOVIE_LIMIT, MovieQuery
 from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import _valid_uuid, empty_document, validate_document
 from .contracts import Record
@@ -850,6 +850,43 @@ class MongoCatalogue(_Repository):
 
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)
+
+    def related_movies(self, movie):
+        self._scope.check()
+        _identity(movie["id"])
+        genres = [genre.casefold() for genre in movie["genres"]]
+        director = movie["director"].casefold()
+        pipeline = [
+            {
+                "$match": {
+                    "_id": {"$ne": movie["id"]},
+                    "$or": [{"genre_keys": {"$in": genres}}, {"director_key": director}],
+                }
+            },
+            {
+                "$set": {
+                    "_shared_genres": {
+                        "$size": {"$setIntersection": ["$genre_keys", {"$literal": genres}]}
+                    },
+                    "_same_director": {"$eq": ["$director_key", {"$literal": director}]},
+                }
+            },
+            {
+                "$sort": {
+                    "_shared_genres": -1,
+                    "_same_director": -1,
+                    "title_key": 1,
+                    "year": 1,
+                    "_id": 1,
+                }
+            },
+            {"$limit": RELATED_MOVIE_LIMIT},
+            {"$project": {"_shared_genres": 0, "_same_director": 0}},
+        ]
+        with self._scope.collection("movies").aggregate(
+            pipeline, session=self._scope._session
+        ) as cursor:
+            return [decode_record("movies", row) for row in cursor]
 
     def copy(self, identity: str) -> Record | None:
         return self._get("copies", identity)

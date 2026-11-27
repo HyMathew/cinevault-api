@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .validation import SUPPORTS, ValidationError, is_unicode
 
 MOVIE_KEYS = frozenset({"search_key", "title_key", "director_key", "genre_keys"})
+RELATED_MOVIE_LIMIT = 4
 type MovieKey = tuple[str, int, str]
 
 

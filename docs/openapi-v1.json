@@ -538,6 +538,17 @@
       ],
       "get": {
         "operationId": "getMovie",
+        "parameters": [
+          {
+            "name": "include",
+            "in": "query",
+            "description": "Ajoute les films apparentés, calculés à partir des métadonnées publiques.",
+            "schema": {
+              "type": "string",
+              "enum": ["related"]
+            }
+          }
+        ],
         "responses": {
           "400": {
             "$ref": "#/components/responses/Error"
@@ -574,7 +585,7 @@
                 "schema": {
                   "type": "string"
                 },
-                "description": "Version de l’entité"
+                "description": "Version de la représentation. Avec include=related, utiliser le champ _etag du film pour If-Match."
               }
             }
           }
@@ -2983,6 +2994,24 @@
               "minLength": 1,
               "maxLength": 80,
               "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "related": {
+            "type": "array",
+            "maxItems": 4,
+            "description": "Présent uniquement sur une lecture avec include=related.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "title", "year", "director", "shared_genres", "same_director"],
+              "properties": {
+                "id": {"$ref": "#/components/schemas/Stored_id"},
+                "title": {"$ref": "#/components/schemas/Movie/properties/title"},
+                "year": {"$ref": "#/components/schemas/Movie/properties/year"},
+                "director": {"$ref": "#/components/schemas/Stored_shortText"},
+                "shared_genres": {"$ref": "#/components/schemas/Movie/properties/genres"},
+                "same_director": {"type": "boolean"}
+              }
             }
           },
           "_etag": {

@@ -255,6 +255,73 @@ def exercise_catalogue_availability(backend, *, observer=None):
     }
 
 
+def exercise_related_movies(backend, *, observer=None):
+    service = service_type()(backend)
+    genre = uuid.uuid4().hex
+    director = "$Alice " + genre
+    first, second = "$Comédie " + genre, "Aventure " + genre
+
+    def film(title, auteur, genres, *, year=2026):
+        return {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "director": auteur,
+            "year": year,
+            "genres": genres,
+            "actors": [],
+            "synopsis": "Synopsis synthétique du banc",
+        }
+
+    seed = film("Portrait", director, [first, second])
+    both = film("Lumière", director.upper(), [first.upper(), second])
+    same = film("Zénith", director, [second])
+    tie = film("ÉTÉ", "Autre", [first], year=2025)
+    next_film = film("été", "Autre auteur", [second], year=2025)
+    earlier, later = sorted((tie, next_film), key=lambda row: row["id"])
+    newer = film("été", "Auteur distinct", [first])
+    dropped = film("Écran blanc", director, [])
+    unrelated = film("Absence de lien", "Auteur sans correspondant " + genre, [])
+    backend.run(
+        lambda work: [
+            work.catalogue.insert_movie(row)
+            for row in (seed, both, tie, next_film, same, newer, dropped, unrelated)
+        ]
+    )
+    before = backend.query(lambda work: work.revision)
+    if observer is not None:
+        observer.clear()
+    response = service.movie(seed["id"], include_related=True)
+    assert response.status == 200
+    assert response.body["related"] == [
+        {
+            **{key: row[key] for key in ("id", "title", "year", "director")},
+            "shared_genres": genres,
+            "same_director": common_director,
+        }
+        for row, genres, common_director in (
+            (both, [first, second], True),
+            (same, [second], True),
+            (earlier, earlier["genres"], False),
+            (later, later["genres"], False),
+        )
+    ]
+    assert response.headers["ETag"] != response.body["_etag"]
+    commands = verify_read_trace(observer)
+    assert backend.query(lambda work: work.revision) == before
+    assert service.movie(unrelated["id"], include_related=True).body["related"] == []
+    assert service.movie("not-an-id", include_related=True).status == 404
+    assert service.movie(str(uuid.uuid4()), include_related=True).status == 404
+    ordinary = service.movie(seed["id"])
+    assert "related" not in ordinary.body
+    assert ordinary.headers["ETag"] == response.body["_etag"]
+    backend.run(lambda work: work.catalogue.save_movie({**both, "genres": []}))
+    after = service.movie(seed["id"], include_related=True)
+    assert after.body["related"][0]["id"] == same["id"]
+    assert after.headers["ETag"] != response.headers["ETag"]
+    assert after.body["_etag"] == ordinary.headers["ETag"]
+    return {"related_catalogue": "passed", "native_public_related_commands": commands}
+
+
 class PublicCatalogueServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -265,6 +332,9 @@ class PublicCatalogueServiceTests(unittest.TestCase):
 
     def test_shared_public_contract_on_real_json(self):
         self.assertEqual(exercise_public_queries(self.backend)["public_catalogue"], "passed")
+
+    def test_public_related_movies_are_deterministic_and_read_only(self):
+        self.assertEqual(exercise_related_movies(self.backend)["related_catalogue"], "passed")
 
     def test_catalogue_availability_matches_detail_without_mutating_json(self):
         self.assertEqual(
@@ -343,6 +413,7 @@ def exercise_public_catalogue_service(database, *, observer=None):
 
     result = exercise_public_queries(MongoPersistence(database), observer=observer)
     result.update(exercise_catalogue_availability(MongoPersistence(database), observer=observer))
+    result.update(exercise_related_movies(MongoPersistence(database), observer=observer))
     raw = database.movies.find_one({"_id": result.pop("_fixture_movie_id")})
     invalid = {**raw, "_id": str(uuid.uuid4())}
     invalid.pop("search_key")

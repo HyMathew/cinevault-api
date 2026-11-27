@@ -6,6 +6,16 @@ from .catalogue_model import etag, resource
 from .results import ServiceResult
 
 
+def related_summary(movie, candidate):
+    labels = {genre.casefold(): genre for genre in movie["genres"]}
+    other_genres = {genre.casefold() for genre in candidate["genres"]}
+    return {
+        **{key: candidate[key] for key in ("id", "title", "year", "director")},
+        "shared_genres": [label for key, label in labels.items() if key in other_genres],
+        "same_director": movie["director"].casefold() == candidate["director"].casefold(),
+    }
+
+
 class PublicCatalogueService:
     def __init__(self, persistence):
         self._persistence = persistence
@@ -29,21 +39,28 @@ class PublicCatalogueService:
 
         return self._persistence.query(read)
 
-    def _entity(self, kind, identity):
+    def _entity(self, kind, identity, *, include_related=False):
         def read(work):
             if not canonical_identity(identity):
                 return missing()
             entity = getattr(work.catalogue, kind)(identity)
-            return (
-                missing()
-                if entity is None
-                else ServiceResult(200, body=resource(entity), headers={"ETag": etag(entity)})
-            )
+            if entity is None:
+                return missing()
+            body = resource(entity)
+            transport_version = body["_etag"]
+            if include_related:
+                body["related"] = [
+                    related_summary(entity, other)
+                    for other in work.catalogue.related_movies(entity)
+                ]
+                # The optional representation changes when another film is edited.
+                transport_version = etag(body)
+            return ServiceResult(200, body=body, headers={"ETag": transport_version})
 
         return self._persistence.query(read)
 
-    def movie(self, identity):
-        return self._entity("movie", identity)
+    def movie(self, identity, *, include_related=False):
+        return self._entity("movie", identity, include_related=include_related)
 
     def copy(self, identity):
         return self._entity("copy", identity)

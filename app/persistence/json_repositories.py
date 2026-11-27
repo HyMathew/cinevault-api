@@ -2,11 +2,12 @@
 
 import copy
 import re
+from heapq import nsmallest
 from os import getpid
 from threading import get_ident
 
 from ..auth_storage import USERNAME
-from ..catalogue_query import MovieQuery, movie_identity_key, movie_keys
+from ..catalogue_query import RELATED_MOVIE_LIMIT, MovieQuery, movie_identity_key, movie_keys
 from ..personal_model import AUDIT_KEEP, PersonalQuery
 from ..storage_v2 import COLLECTIONS, _valid_uuid
 from .contracts import Record
@@ -472,6 +473,26 @@ class JsonCatalogue(_Repository):
 
     def movie(self, identity: str) -> Record | None:
         return self._get("movies", identity)
+
+    def related_movies(self, movie):
+        _identity(movie["id"])
+        genres = {genre.casefold() for genre in movie["genres"]}
+        director = movie["director"].casefold()
+
+        def candidates():
+            for row in self._scope.rows("movies"):
+                if row["id"] == movie["id"]:
+                    continue
+                shared = len(genres.intersection(genre.casefold() for genre in row["genres"]))
+                same_director = row["director"].casefold() == director
+                if shared or same_director:
+                    yield (
+                        (-shared, -same_director, row["title"].casefold(), row["year"], row["id"]),
+                        row,
+                    )
+
+        result = nsmallest(RELATED_MOVIE_LIMIT, candidates(), key=lambda candidate: candidate[0])
+        return [copy.deepcopy(row) for _, row in result]
 
     def copy(self, identity: str) -> Record | None:
         return self._get("copies", identity)

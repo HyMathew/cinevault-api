@@ -2,12 +2,14 @@
 
 from flask import Blueprint, current_app, request, url_for
 
+from .catalogue_query import query_values
 from .enterprise_auth import bearer, no_cache, now, payload, run_service
 from .services.catalogue import CatalogueService
 from .services.catalogue_model import COPY_FIELDS, copy_data, movie_data
 from .services.catalogue_model import MOVIE_FIELDS as MOVIE_FIELDS
 from .services.copies import CopyService
 from .services.public_catalogue import PublicCatalogueService
+from .validation import ValidationError
 
 bp = Blueprint("enterprise_catalogue", __name__, url_prefix="/api/v1")
 bp.after_request(no_cache)
@@ -66,7 +68,15 @@ def list_movies():
 
 @bp.get("/movies/<movie_id>")
 def get_movie(movie_id):
-    return run_service(lambda: public_catalogue_service().movie(movie_id))
+    def selected_movie():
+        if "include" not in request.args:
+            return public_catalogue_service().movie(movie_id)
+        values = query_values(list(request.args.items(multi=True)), {"include"})
+        if values["include"] != "related":
+            raise ValidationError({"include": "Projection inconnue."})
+        return public_catalogue_service().movie(movie_id, include_related=True)
+
+    return run_service(selected_movie)
 
 
 @bp.post("/movies")
