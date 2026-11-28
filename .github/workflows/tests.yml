@@ -113,13 +113,15 @@ jobs:
           retention-days: 7
           if-no-files-found: error
   image:
+    # The Signature source branch runs application tests while the image dependency is blocked.
     if: >-
-      ${{ !(((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      ${{ github.ref != 'refs/heads/quality/cinevault-signature-ci' &&
+        (!(((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
           !inputs.candidate_commit) ||
         (github.event_name == 'workflow_dispatch' &&
          github.repository == 'HyMathew/cinevault-api' &&
-         github.ref == 'refs/heads/quality/cinevault-v2' && inputs.candidate_commit == github.sha)) }}
+         github.ref == 'refs/heads/quality/cinevault-v2' && inputs.candidate_commit == github.sha))) }}
     needs: [quality, tests, mongodb]
     permissions:
       contents: read
@@ -156,12 +158,13 @@ jobs:
           if-no-files-found: error
   publish-image:
     if: >-
-      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref != 'refs/heads/quality/cinevault-signature-ci' &&
+      (((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
        !inputs.candidate_commit) ||
       (github.event_name == 'workflow_dispatch' &&
        github.repository == 'HyMathew/cinevault-api' &&
-       github.ref == 'refs/heads/quality/cinevault-v2' && inputs.candidate_commit == github.sha)
+       github.ref == 'refs/heads/quality/cinevault-v2' && inputs.candidate_commit == github.sha))
     needs: [quality, tests, mongodb]
     permissions:
       contents: read
