@@ -104,8 +104,12 @@ def exercise_public_queries(backend, *, observer=None):
         movies[:2], key=lambda row: (row["title"].casefold(), row["id"]), reverse=True
     )
     assert [m["id"] for m in reverse.body["movies"]] == [m["id"] for m in expected_reverse]
-    summary = listing.body["copy_summaries"][movies[0]["id"]]
-    assert summary == {"count": 2, "supports": ["dvd", "vhs"]}
+    assert listing.body["copy_summaries"] == {
+        movies[0]["id"]: {"count": 2, "supports": ["dvd", "vhs"]},
+        movies[1]["id"]: {"count": 1, "supports": ["dvd"]},
+        movies[2]["id"]: {"count": 0, "supports": []},
+        movies[3]["id"]: {"count": 0, "supports": []},
+    }
     assert (
         service.movie(movies[0]["id"]).headers["ETag"]
         == service.movie(movies[0]["id"]).body["_etag"]
@@ -137,6 +141,11 @@ def exercise_public_queries(backend, *, observer=None):
     all_copies = service.copies([]).body["copies"]
     assert {item["id"] for item in [*copies, *extra]}.issubset({item["id"] for item in all_copies})
     assert len(service.copies([("movie_id", movies[0]["id"])]).body["copies"]) == 107
+    repeated = service.movies([("q", movies[0]["title"].split(" ", 1)[0])]).body
+    assert repeated["copy_summaries"][movies[0]["id"]] == {
+        "count": 107,
+        "supports": ["dvd", "vhs"],
+    }
     assert backend.query(lambda work: work.revision) == before
     return {
         "public_catalogue": "passed",
