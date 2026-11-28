@@ -3332,6 +3332,7 @@
                 "supports": {
                   "type": "array",
                   "uniqueItems": true,
+                  "description": "Supports distincts, par ordre croissant de leur identifiant.",
                   "items": {
                     "enum": [
                       "numerique",

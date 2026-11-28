@@ -56,7 +56,7 @@ def fixtures(backend):
             "location": "A",
             "condition": "good",
         }
-        for movie, support in ((movies[0], "dvd"), (movies[0], "vhs"), (movies[1], "dvd"))
+        for movie, support in ((movies[0], "vhs"), (movies[0], "dvd"), (movies[1], "dvd"))
     ]
     backend.run(
         lambda work: (
@@ -105,7 +105,7 @@ def exercise_public_queries(backend, *, observer=None):
     )
     assert [m["id"] for m in reverse.body["movies"]] == [m["id"] for m in expected_reverse]
     summary = listing.body["copy_summaries"][movies[0]["id"]]
-    assert summary["count"] == 2 and set(summary["supports"]) == {"dvd", "vhs"}
+    assert summary == {"count": 2, "supports": ["dvd", "vhs"]}
     assert (
         service.movie(movies[0]["id"]).headers["ETag"]
         == service.movie(movies[0]["id"]).body["_etag"]

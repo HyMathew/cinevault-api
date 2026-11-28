@@ -480,6 +480,8 @@ class JsonCatalogue(_Repository):
                 summary["count"] += 1
                 if row["support"] not in summary["supports"]:
                     summary["supports"].append(row["support"])
+        for summary in summaries.values():
+            summary["supports"].sort()
         return summaries
 
     def movie(self, identity: str) -> Record | None:
