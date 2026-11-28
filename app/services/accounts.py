@@ -8,6 +8,7 @@ from ..personal_model import make_event
 from ..validation import ValidationError
 from .authentication import (
     authenticated,
+    authenticated_read,
     normalize_username,
     public_profile,
     valid_display,
@@ -192,7 +193,7 @@ class AdminAccountService:
                 },
             )
 
-        return authenticated(self._persistence, token, timestamp, listing)
+        return authenticated_read(self._persistence, token, timestamp, listing)
 
     def get(self, token, identity, *, timestamp):
         def get(work, user, session):

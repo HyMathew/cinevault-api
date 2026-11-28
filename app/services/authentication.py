@@ -125,6 +125,21 @@ def authenticated_query(persistence, token, timestamp, operation):
         return unauthorized()
 
 
+def authenticated_read(persistence, token, timestamp, operation):
+    """Read in one snapshot when the session already reflects this second."""
+    needs_touch = object()
+
+    def already_current(work, user, session):
+        if session["last_seen"] != timestamp:
+            return needs_touch
+        return operation(work, user, session)
+
+    result = authenticated_query(persistence, token, timestamp, already_current)
+    if result is needs_touch:
+        return authenticated(persistence, token, timestamp, operation)
+    return result
+
+
 def authenticated(persistence, token, timestamp, operation):
     """Read authority and touch the session in the same UoW as its business operation."""
     digest = token_digest(token)

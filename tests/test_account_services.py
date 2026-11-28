@@ -11,7 +11,7 @@ import pytest
 from app.circulation_model import PayloadError, RequestBody
 from app.persistence.json import JsonPersistence
 from app.registration_admission import RegistrationAdmission, RegistrationBusy
-from app.services.authentication import token_digest
+from app.services.authentication import IDLE_TTL, token_digest
 from app.storage_v2 import V2Store
 from app.validation import ValidationError
 
@@ -106,6 +106,65 @@ def exercise_native_directory_filters(database):
 def test_directory_filters_on_json(backend):
     persistence, _ = backend
     assert exercise_directory_filters(persistence)["directory_filters"] == "passed"
+
+
+def exercise_directory_activity(persistence):
+    _, admin = implementation()
+    directory = admin(persistence)
+    suffix = uuid.uuid4().hex[:8]
+    _, operator, session = seed_account(persistence, "seen-" + suffix, "admin")
+    _, member, member_session = seed_account(persistence, "member-" + suffix)
+
+    def observed(current=session):
+        return persistence.query(
+            lambda work: (work.revision, work.sessions.by_token_hash(current["token_hash"]))
+        )
+
+    initial, _ = observed()
+    same_second = directory.users(operator, [], timestamp=NOW)
+    assert same_second.status == 200
+    assert observed() == (initial, session)
+
+    assert directory.users(operator, [], timestamp=NOW + 1).body == same_second.body
+    renewed = {**session, "last_seen": NOW + 1}
+    assert observed() == (initial + 1, renewed)
+    assert directory.users(operator, [], timestamp=NOW + 1).status == 200
+    assert observed() == (initial + 1, renewed)
+
+    with pytest.raises(ValidationError):
+        directory.users(operator, [("limit", "bad")], timestamp=NOW + 2)
+    assert observed() == (initial + 1, renewed)
+    assert directory.users(operator, [], timestamp=NOW + 1 + IDLE_TTL).status == 401
+    assert observed() == (initial + 1, renewed)
+
+    denied = directory.users(member, [("limit", "bad")], timestamp=NOW + 2)
+    assert denied.status == 403
+    assert observed(member_session) == (initial + 2, {**member_session, "last_seen": NOW + 2})
+
+
+def test_directory_activity_writes_only_when_timestamp_advances(backend):
+    persistence, _ = backend
+    exercise_directory_activity(persistence)
+
+
+def test_directory_write_revalidates_a_session_revoked_after_reading(backend):
+    persistence, _ = backend
+    _, admin = implementation()
+    _, operator, session = seed_account(persistence, "operator", "admin")
+    initial = persistence.query(lambda work: work.revision)
+
+    class RevokedBeforeWrite:
+        def query(self, callback):
+            result = persistence.query(callback)
+            persistence.run(lambda work: work.sessions.revoke(session["id"]))
+            return result
+
+        def run(self, callback):
+            return persistence.run(callback)
+
+    denied = admin(RevokedBeforeWrite()).users(operator, [], timestamp=NOW + 1)
+    assert denied.status == 401
+    assert persistence.query(lambda work: work.revision) == initial + 1
 
 
 def prepared_hash(password):
